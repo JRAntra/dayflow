@@ -1,7 +1,7 @@
 {
   "name": "dayflow",
   "productName": "DayFlow",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "A local desktop day planner that reminds you when each phase of your day starts and ends, plus Google Calendar meeting reminders.",
   "main": "src/main.js",
   "scripts": {
@@ -28,7 +28,20 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "assets/icon.icns"
+      "icon": "assets/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "DayFlow-${version}-${arch}.${ext}"
     },
     "win": {
       "target": "nsis",
@@ -37,6 +50,10 @@
     "linux": {
       "target": "AppImage",
       "icon": "assets/icon.png"
+    },
+    "dmg": {
+      "title": "DayFlow ${version}",
+      "artifactName": "DayFlow-${version}-${arch}.${ext}"
     }
   }
 }

@@ -4,6 +4,15 @@ A local desktop app for running your day in blocks. You set up the phases of you
 
 Everything stays on your computer. The only network traffic is to Google, and only if you connect your calendar.
 
+## Install (macOS)
+
+Download the DMG for your Mac from the [latest release](https://github.com/JRAntra/dayflow/releases): **arm64** for Apple Silicon (M1 and later), **x64** for Intel. Not sure which? Apple menu → About This Mac → *Chip* (Apple M…) or *Processor* (Intel).
+
+1. Open the DMG and drag **DayFlow** onto **Applications**.
+2. Open DayFlow from Applications. Beta builds aren't notarized by Apple yet, so macOS says it can't check the app. Click **Done**.
+3. Go to **System Settings → Privacy & Security**, scroll to the message about DayFlow, and click **Open Anyway**, then confirm. You only do this once.
+4. Allow notifications when macOS asks.
+
 ## Run it
 
 You need Node.js 20 or newer.
@@ -130,7 +139,7 @@ In your OS's app-data folder (`~/Library/Application Support/Dayflow` on macOS, 
 npm run dist
 ```
 
-This produces a `.dmg` (macOS), an `.exe` installer (Windows) or an AppImage (Linux) in `dist/`. Build on the OS you're targeting.
+This produces a `.dmg` (macOS), an `.exe` installer (Windows) or an AppImage (Linux) in `dist/`. Build on the OS you're targeting. On macOS it makes two DMGs, one for Apple Silicon and one for Intel, with a free ad-hoc signature; signing with an Apple Developer ID and notarizing would remove the Open Anyway step.
 
 The icon is drawn in `assets/icon.svg` (the app) and `assets/tray.svg` / `assets/trayTemplate.svg` (the tray; macOS tints the template version for light and dark menu bars). After editing them, `npm run icons` renders the PNGs and `icon.icns`, using Electron itself.
 
