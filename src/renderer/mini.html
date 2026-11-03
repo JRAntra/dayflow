@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'">
+  <title>DayFlow timer</title>
+  <link rel="stylesheet" href="mini.css">
+</head>
+<body>
+  <!-- Drag to move, double-click for the full window, right-click for options -->
+  <div id="pill" class="pill">
+    <div class="line">
+      <span id="m-title" class="title"></span>
+      <span id="m-count" class="count roll"></span>
+    </div>
+    <div id="m-sub" class="line sub">
+      <span id="m-bar" class="bar"><span></span></span>
+      <span id="m-next" class="next"></span>
+    </div>
+  </div>
+  <script src="mini.js"></script>
+</body>
+</html>

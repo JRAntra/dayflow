@@ -1,0 +1,39 @@
+@import "tokens.css";
+@import "components.css";
+
+/* The pill fills its window. On macOS the window itself is HUD glass; elsewhere the page
+   draws a solid rounded pill on a transparent window. */
+html, body { height: 100%; overflow: hidden; background: transparent; }
+body { user-select: none; cursor: default; }
+.pill {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: center; gap: 7px;
+  padding: 10px 16px;
+}
+:root:not([data-platform="darwin"]) .pill {
+  inset: 2px; border-radius: var(--radius-xl); background: var(--card-solid);
+  border: 0.5px solid var(--border); box-shadow: var(--shadow-md);
+}
+
+.line { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.title { flex: 1; min-width: 0; font-weight: 600; font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.count { font: 600 26px/1 var(--font-rounded); letter-spacing: -0.03em; }
+.count small { font-size: var(--text-sm); color: var(--label-2); margin-left: 2px; letter-spacing: 0; }
+
+.sub { align-items: center; }
+.bar { flex: 1; height: 4px; border-radius: 2px; background: var(--well); overflow: hidden; }
+.bar > span { display: block; height: 100%; border-radius: 2px; background: var(--accent); transform-origin: left; transform: scaleX(0); transition: transform 1s linear, background var(--dur-slow); }
+.next { color: var(--label-2); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+.bar[hidden] + .next { max-width: none; }
+
+/* The last minutes of a block (its type's heads-up), with one gentle pulse as they begin */
+.pill.ending .count { color: var(--sun); }
+.pill.ending .bar > span { background: var(--sun); }
+.pill.pulse { animation: pulse 900ms var(--ease-out); }
+@keyframes pulse { 30% { transform: scale(1.035); } 100% { transform: none; } }
+
+/* Free time, and the next block's preparation window has opened */
+.pill.ready .title { color: var(--sun); }
+
+/* Nothing running: a single calm line */
+.pill.idle .title { font-weight: 500; color: var(--label-2); }

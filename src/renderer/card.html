@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>DayFlow reminder</title>
+  <link rel="stylesheet" href="card.css">
+</head>
+<body>
+  <!-- One reminder: what it's about, when, and what you can do. Clicking the text opens DayFlow. -->
+  <article class="card" id="card" aria-live="assertive">
+    <button class="text" id="open" type="button">
+      <span class="head">
+        <span class="label" id="label"></span>
+        <span class="more" id="more" hidden></span>
+      </span>
+      <span class="title" id="title"></span>
+      <span class="sub" id="sub"></span>
+    </button>
+    <div class="actions" id="actions"></div>
+  </article>
+  <script src="card.js"></script>
+</body>
+</html>

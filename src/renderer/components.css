@@ -1,0 +1,177 @@
+/* DayFlow design system: components
+   Buttons, fields, switches, steppers, pop-up menus, tabs, cards, toasts, dialogs and the
+   shared animations. Built only from tokens.css, so every window looks and moves the same. */
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  font: var(--text-md)/1.45 var(--font);
+  color: var(--label);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: none; box-shadow: var(--ring); }
+.muted { color: var(--label-2); font-size: var(--text-sm); }
+
+/* Buttons ---------------------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; padding: 0 12px; border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border); background: var(--card-solid); box-shadow: var(--shadow-sm);
+  font-size: var(--text-md); font-weight: 500; white-space: nowrap; cursor: default;
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast), box-shadow var(--dur-fast);
+}
+.btn:hover:not(:disabled) { background: color-mix(in srgb, var(--card-solid) 92%, var(--label)); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.4; }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.btn.primary:hover:not(:disabled) { background: var(--accent-strong); }
+.btn.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--label-2); }
+.btn.ghost:hover:not(:disabled) { background: var(--hover); color: var(--label); }
+.btn.small { height: 24px; padding: 0 9px; font-size: var(--text-sm); }
+.btn.icon { width: 28px; padding: 0; }
+.btn.small.icon { width: 24px; }
+
+/* Fields ------------------------------------------------------------------ */
+.field, input[type="text"], input[type="time"], input[type="number"] {
+  height: 28px; padding: 0 8px; border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border); background: var(--well);
+  transition: box-shadow var(--dur-fast), background var(--dur-fast);
+}
+input:focus { background: var(--card-solid); }
+input.bad { box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 55%, transparent); }
+input[type="number"]::-webkit-inner-spin-button { display: none; }
+
+/* A pop-up button, like the sound menus in macOS */
+select {
+  appearance: none; height: 28px; padding: 0 28px 0 10px; border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border); background: var(--card-solid) no-repeat right 8px center / 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 12'%3E%3Cpath d='M2 4.5 5 1.5 8 4.5M2 7.5 5 10.5 8 7.5' fill='none' stroke='%23889' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  box-shadow: var(--shadow-sm); cursor: default; min-width: 0;
+}
+
+/* A button that stays pressed, like "Fade in" */
+.fade-toggle { color: var(--label-2); box-shadow: none; background: var(--well); }
+.fade-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+/* Switch */
+.switch {
+  appearance: none; flex: none; margin: 0; width: 34px; height: 20px; border-radius: var(--radius-full);
+  background: var(--pressed); position: relative; cursor: default;
+  transition: background var(--dur-base) var(--ease-out);
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform var(--dur-base) var(--ease-spring), width var(--dur-fast);
+}
+.switch:active::after { width: 20px; }
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(14px); }
+.switch:checked:active::after { transform: translateX(10px); }
+
+/* Stepper: − [10] + */
+.stepper {
+  display: inline-flex; align-items: center; height: 28px; border-radius: var(--radius-sm);
+  background: var(--well); border: 0.5px solid var(--border);
+}
+.stepper button {
+  width: 24px; height: 100%; border: 0; background: none; color: var(--label-2); font-size: 15px; line-height: 1;
+  border-radius: var(--radius-sm); cursor: default;
+}
+.stepper button:hover { background: var(--hover); color: var(--label); }
+.stepper button:active { background: var(--pressed); }
+.stepper input { width: 34px; height: 26px; border: 0; background: none; padding: 0; text-align: center; box-shadow: none; }
+
+/* Range slider */
+input[type="range"] { accent-color: var(--accent); }
+
+/* Keyboard shortcut */
+kbd {
+  font: 500 var(--text-sm) var(--font); padding: 1px 6px; border-radius: 5px;
+  background: var(--well); border: 0.5px solid var(--border); color: var(--label-2); white-space: nowrap;
+}
+
+/* Small labels */
+.badge {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-full);
+  font-size: var(--text-xs); font-weight: 600; color: var(--accent); background: var(--accent-soft);
+}
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+
+/* Tabs: icon over label, like macOS settings toolbars */
+.tabs { display: flex; gap: 2px; justify-content: center; }
+.tabs button {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 76px;
+  padding: 6px 10px 5px; border: 0; border-radius: var(--radius-md); background: none;
+  color: var(--label-2); font-size: var(--text-xs); font-weight: 500; cursor: default;
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast) var(--ease-out);
+}
+.tabs button svg { width: 20px; height: 20px; }
+.tabs button:hover { background: var(--hover); color: var(--label); }
+.tabs button:active { transform: scale(0.96); }
+.tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* Cards and grouped rows (the "inset grouped" lists of macOS settings) */
+.card {
+  background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.group { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.group > .row { padding: 10px var(--space-4); min-height: 44px; }
+.group > .row + .row { border-top: 0.5px solid var(--separator); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.group-title { font-size: var(--text-sm); font-weight: 600; color: var(--label-2); margin: var(--space-6) var(--space-2) var(--space-2); }
+.group-note { font-size: var(--text-sm); color: var(--label-2); margin: var(--space-2) var(--space-2) 0; }
+
+/* Status text */
+.status { color: var(--label-2); font-size: var(--text-sm); min-height: 18px; }
+.status.err, .error { color: var(--danger); font-size: var(--text-sm); }
+.error:empty { display: none; }
+
+/* Toast */
+.toast {
+  position: fixed; left: 50%; bottom: var(--space-6); z-index: 50; max-width: min(560px, 80vw);
+  padding: 9px 16px; border-radius: var(--radius-full); font-size: var(--text-md);
+  background: color-mix(in srgb, var(--card-solid) 88%, transparent); backdrop-filter: blur(20px) saturate(1.6);
+  border: 0.5px solid var(--border); box-shadow: var(--shadow-lg);
+  transform: translate(-50%, 0); opacity: 1;
+  transition: transform var(--dur-slow) var(--ease-spring), opacity var(--dur-base);
+}
+.toast.err { color: var(--danger); }
+.toast[data-state="hidden"] { transform: translate(-50%, 24px); opacity: 0; pointer-events: none; }
+
+/* Dialog: scales in, with a dimmed backdrop */
+dialog.sheet {
+  width: min(540px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow-y: auto;
+  padding: var(--space-6); border: 0.5px solid var(--border); border-radius: var(--radius-xl);
+  background: var(--card-solid); color: var(--label); box-shadow: var(--shadow-lg);
+  opacity: 1; transform: scale(1);
+  transition: opacity var(--dur-base), transform var(--dur-slow) var(--ease-spring), overlay var(--dur-base) allow-discrete, display var(--dur-base) allow-discrete;
+}
+@starting-style { dialog.sheet[open] { opacity: 0; transform: scale(0.94); } }
+dialog.sheet:not([open]) { opacity: 0; transform: scale(0.96); }
+dialog.sheet::backdrop { background: rgb(0 0 0 / 0.28); transition: background var(--dur-base), overlay var(--dur-base) allow-discrete, display var(--dur-base) allow-discrete; }
+@starting-style { dialog.sheet[open]::backdrop { background: rgb(0 0 0 / 0); } }
+dialog.sheet h2 { font-size: var(--text-xl); font-weight: 700; letter-spacing: -0.01em; margin-bottom: var(--space-3); }
+
+/* Rolling digits: each changed character slides up into place */
+.roll { display: inline-flex; align-items: baseline; overflow: hidden; }
+.roll > span { display: inline-block; }
+.roll > span.in { animation: roll-in var(--dur-slow) var(--ease-out); }
+@keyframes roll-in { from { transform: translateY(55%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Shared entrances */
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.rise { animation: rise var(--dur-slow) var(--ease-out) both; }
+
+/* Page and tab changes cross-fade (view transitions) */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-base); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
