@@ -6,7 +6,14 @@ Everything stays on your computer. The only network traffic is to Google, and on
 
 ## Install (macOS)
 
-Download the DMG for your Mac from the [latest release](https://github.com/JRAntra/dayflow/releases): **arm64** for Apple Silicon (M1 and later), **x64** for Intel. Not sure which? Apple menu → About This Mac → *Chip* (Apple M…) or *Processor* (Intel).
+Download the DMG for your Mac from the [latest release](https://github.com/JRAntra/dayflow/releases). Apple menu → **About This Mac** shows both things you need: the macOS version, and *Chip: Apple M…* (Apple Silicon) or *Processor: Intel*.
+
+| Your Mac | macOS 13 Ventura or later | macOS 11 Big Sur or 12 Monterey |
+|---|---|---|
+| Apple Silicon | `DayFlow-<version>-arm64.dmg` | `DayFlow-<version>-macos11-arm64.dmg` |
+| Intel | `DayFlow-<version>-x64.dmg` | `DayFlow-<version>-macos11-x64.dmg` |
+
+The macOS 11 builds are the same app on an older Electron (37), which no longer gets security updates from the Electron project; use the regular builds if your Mac can run them.
 
 1. Open the DMG and drag **DayFlow** onto **Applications**.
 2. Open DayFlow from Applications. Beta builds aren't notarized by Apple yet, so macOS says it can't check the app. Click **Done**.
@@ -139,7 +146,7 @@ In your OS's app-data folder (`~/Library/Application Support/Dayflow` on macOS, 
 npm run dist
 ```
 
-This produces a `.dmg` (macOS), an `.exe` installer (Windows) or an AppImage (Linux) in `dist/`. Build on the OS you're targeting. On macOS it makes two DMGs, one for Apple Silicon and one for Intel, with a free ad-hoc signature; signing with an Apple Developer ID and notarizing would remove the Open Anyway step.
+This produces a `.dmg` (macOS), an `.exe` installer (Windows) or an AppImage (Linux) in `dist/`. `npm run dist:legacy` adds the macOS 11 builds in `dist/legacy/`. Build on the OS you're targeting. On macOS it makes two DMGs, one for Apple Silicon and one for Intel, with a free ad-hoc signature; signing with an Apple Developer ID and notarizing would remove the Open Anyway step.
 
 The icon is drawn in `assets/icon.svg` (the app) and `assets/tray.svg` / `assets/trayTemplate.svg` (the tray; macOS tints the template version for light and dark menu bars). After editing them, `npm run icons` renders the PNGs and `icon.icns`, using Electron itself.
 

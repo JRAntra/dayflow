@@ -1,13 +1,14 @@
 {
   "name": "dayflow",
   "productName": "DayFlow",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "A local desktop day planner that reminds you when each phase of your day starts and ends, plus Google Calendar meeting reminders.",
   "main": "src/main.js",
   "scripts": {
     "start": "node scripts/dev.js",
-    "dist": "electron-builder",
-    "icons": "electron scripts/build-icons.js"
+    "dist": "electron-builder --publish never",
+    "icons": "electron scripts/build-icons.js",
+    "dist:legacy": "electron-builder --mac --publish never -c.electronVersion=37.10.3 -c.mac.minimumSystemVersion=11.0 -c.directories.output=dist/legacy '-c.mac.artifactName=DayFlow-${version}-macos11-${arch}.${ext}' '-c.dmg.artifactName=DayFlow-${version}-macos11-${arch}.${ext}' '-c.dmg.title=DayFlow ${version} (macOS 11+)'"
   },
   "dependencies": {
     "@fontsource/sora": "5.3.0",

@@ -174,7 +174,7 @@ function renderDial(now) {
       // The hand points straight up and is rotated into place, so it can glide.
       const [hx0, hy0] = polar(R_BLOCK - 14, 0);
       const [hx1, hy1] = polar(R_MEET + 8, 0);
-      parts.push(`<g class="dial-hand" id="dial-hand" style="transform-origin:${C}px ${C}px"><line x1="${hx0}" y1="${hy0}" x2="${hx1}" y2="${hy1}"/><circle cx="${hx1}" cy="${hy1}" r="4.5"/></g>`);
+      parts.push(`<g class="dial-hand" id="dial-hand"><line x1="${hx0}" y1="${hy0}" x2="${hx1}" y2="${hy1}"/><circle cx="${hx1}" cy="${hy1}" r="4.5"/></g>`);
       svg.dataset.start = +range.s;
       svg.dataset.end = +range.e;
     }

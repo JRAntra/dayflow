@@ -77,7 +77,8 @@ body {
 .dial-meet { fill: none; stroke: var(--sun); stroke-linecap: round; }
 .dial-tick { stroke: var(--label-3); stroke-width: 1.2; }
 .dial-hour { fill: var(--label-3); font: 500 11px var(--font); text-anchor: middle; dominant-baseline: middle; }
-.dial-hand { transition: transform 1s linear; }
+/* The hand turns around the dial's centre: the middle of the SVG's 360×360 view box */
+.dial-hand { transform-box: view-box; transform-origin: 50% 50%; transition: transform 1s linear; }
 .dial-hand line { stroke: var(--label); stroke-width: 2; stroke-linecap: round; }
 .dial-hand circle { fill: var(--label); }
 /* On first paint each arc draws itself around the dial */
