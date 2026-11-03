@@ -612,8 +612,11 @@ const FALLBACK_SOUNDS = {
 // ---------------------------------------------------------------------------
 // Reminder cards
 // Each reminder gets a glass card at the top right that stays until you act on it, alongside
-// the macOS notification. A card is a small non-activating panel, so it floats over full-screen
-// apps and on every Space without taking focus from what you're typing. Up to three show at
+// the macOS notification. A card is a small floating window that's shown without being activated,
+// so it sits over full-screen apps and on every Space without taking focus from what you're
+// typing. (Electron's 'panel' window type isn't used: on macOS it only logs a warning, as the
+// style it sets doesn't apply to ordinary windows, and showing inactive already does the job.)
+// Up to three show at
 // once, newest on top; the bottom one says how many more are waiting.
 // ---------------------------------------------------------------------------
 
@@ -677,7 +680,7 @@ function showCard(ev, notification) {
     acceptFirstMouse: true, // the first click presses the button, even though the card isn't focused
     title: 'DayFlow reminder',
     ...(process.platform === 'darwin'
-      ? { type: 'panel', vibrancy: 'popover', visualEffectState: 'active', backgroundColor: '#00000000' }
+      ? { vibrancy: 'popover', visualEffectState: 'active', backgroundColor: '#00000000' }
       : { transparent: true, focusable: false }),
     webPreferences,
   });
