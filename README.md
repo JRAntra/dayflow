@@ -4,6 +4,8 @@ A local desktop app for running your day in blocks. You set up the phases of you
 
 Everything stays on your computer. The only network traffic is to Google, and only if you connect your calendar.
 
+**New to DayFlow?** The [User Guide](User%20Guide.md) walks through every feature, from installing to reminder cards and backups.
+
 ## Install (macOS)
 
 Download the DMG for your Mac from the [latest release](https://github.com/JRAntra/dayflow/releases). Apple menu → **About This Mac** shows both things you need: the macOS version, and *Chip: Apple M…* (Apple Silicon) or *Processor: Intel*.
