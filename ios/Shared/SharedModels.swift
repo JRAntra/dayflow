@@ -34,6 +34,10 @@ struct WidgetSnapshot: Codable, Hashable {
     }
     var items: [Item]
     var written: Date
+    /// Reminders are off until then (`.distantFuture` until you turn them on); nil when on.
+    var offUntil: Date? = nil
+
+    func remindersOff(at date: Date) -> Bool { offUntil.map { date < $0 } ?? false }
 
     static let groupId = "group.com.jrantra.dayflow"
 

@@ -124,18 +124,30 @@ public struct Settings: Codable, Hashable, Sendable {
     /// The calendars whose events count as meetings (EventKit identifiers). nil until you
     /// first allow calendar access, when it becomes your default calendar.
     public var calendars: [String]?
-    /// Reminders are paused until this moment.
+    /// Reminders are turned off until this moment (For 1 hour, For 24 hours).
     public var pausedUntil: Date?
+    /// Reminders are turned off until you turn them back on.
+    public var remindersOff: Bool
     /// The welcome screens have been seen.
     public var onboarded: Bool
 
     public init(sound: Bool = true, volume: Int = 80, meetings: MeetingReminders = Specs.startingMeetingReminders,
-                liveActivity: Bool = true, calendars: [String]? = nil, pausedUntil: Date? = nil, onboarded: Bool = false) {
+                liveActivity: Bool = true, calendars: [String]? = nil, pausedUntil: Date? = nil, remindersOff: Bool = false,
+                onboarded: Bool = false) {
         self.sound = sound; self.volume = volume; self.meetings = meetings; self.liveActivity = liveActivity
-        self.calendars = calendars; self.pausedUntil = pausedUntil; self.onboarded = onboarded
+        self.calendars = calendars; self.pausedUntil = pausedUntil; self.remindersOff = remindersOff; self.onboarded = onboarded
     }
 
-    public func isPaused(at now: Date) -> Bool { pausedUntil.map { now < $0 } ?? false }
+    /// When reminders come back: `.distantFuture` for "until I turn them on", nil when they're on.
+    public func offUntil(at now: Date) -> Date? {
+        if remindersOff { return .distantFuture }
+        return pausedUntil.flatMap { now < $0 ? $0 : nil }
+    }
+
+    public func isOff(at now: Date) -> Bool { offUntil(at: now) != nil }
+
+    /// Kept for older callers: the same as `isOff`.
+    public func isPaused(at now: Date) -> Bool { isOff(at: now) }
 }
 
 /// A timed calendar event that counts as a meeting.

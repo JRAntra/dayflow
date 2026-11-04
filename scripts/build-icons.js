@@ -16,6 +16,10 @@ const OUTPUTS = [
   ['tray.svg', 'tray.png', 32],
   ['trayTemplate.svg', 'trayTemplate.png', 16],
   ['trayTemplate.svg', 'trayTemplate@2x.png', 32],
+  // Reminders turned off: the same icons, crossed out.
+  ['trayOff.svg', 'trayOff.png', 32],
+  ['trayOffTemplate.svg', 'trayOffTemplate.png', 16],
+  ['trayOffTemplate.svg', 'trayOffTemplate@2x.png', 32],
 ];
 const ICNS_SIZES = [16, 32, 64, 128, 256, 512, 1024];
 

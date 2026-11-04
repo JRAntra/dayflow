@@ -103,8 +103,21 @@ struct GeneralView: View {
                 Text("It counts down by itself. When a block ends it shows what's next, and moves on the next time DayFlow runs: when you open it, tap a reminder, or iOS lets it refresh.")
             }
 
+            Section {
+                if let status = TurnOff.status(model.settings) {
+                    LabeledContent("Reminders", value: status.replacingOccurrences(of: "Reminders off", with: "Off"))
+                    Button("Turn on reminders") { model.turnOn() }
+                } else {
+                    TurnOffMenu { Text("Turn off reminders…").frame(maxWidth: .infinity, alignment: .leading) }
+                }
+            } header: {
+                Text("Reminders")
+            } footer: {
+                Text("While reminders are off, nothing rings: no notifications, no sounds, no Live Activity, even if you swipe DayFlow away. Reminders that fall in that time are skipped.")
+            }
+
             Section("Notifications") {
-                LabeledContent("Reminders", value: statusText)
+                LabeledContent("Notifications", value: statusText)
                 if model.notificationStatus == .notDetermined {
                     Button("Turn on notifications") { Task { await model.requestNotifications() } }
                 } else if model.notificationStatus == .denied {

@@ -50,13 +50,13 @@ enum LiveActivityController {
     /// Writes today's and tomorrow's blocks for the widgets. Returns false when the App Group
     /// isn't available, so the widgets can't be used with this signing.
     @discardableResult
-    static func writeWidgetSnapshot(planner: Planner, now: Date = Date()) -> Bool {
+    static func writeWidgetSnapshot(planner: Planner, offUntil: Date? = nil, now: Date = Date()) -> Bool {
         let cal = planner.calendar
         let days = (0..<3).compactMap { cal.date(byAdding: .day, value: $0, to: cal.startOfDay(for: now)) }
         let items = days.flatMap { planner.blocksFor($0) }.map {
             WidgetSnapshot.Item(title: $0.title, typeName: planner.typeOf($0.type).name, start: $0.start, end: $0.end)
         }
-        let ok = WidgetSnapshot(items: items, written: now).write()
+        let ok = WidgetSnapshot(items: items, written: now, offUntil: offUntil).write()
         if ok { WidgetCenter.shared.reloadAllTimelines() }
         return ok
     }

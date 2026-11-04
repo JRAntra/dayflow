@@ -112,6 +112,7 @@ public enum Sanitize {
             s.pausedUntil = p.numberValue.map { Date(timeIntervalSinceReferenceDate: $0) }
             if case .null = p { s.pausedUntil = nil }
         }
+        s.remindersOff = flag(v?["remindersOff"], prev.remindersOff)
         s.onboarded = flag(v?["onboarded"], prev.onboarded)
         return s
     }

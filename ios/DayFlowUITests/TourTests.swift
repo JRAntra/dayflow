@@ -35,11 +35,15 @@ final class TourTests: XCTestCase {
         row(app, "Calendars").tap(); sleep(1); snap(app, "tour-calendars")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Today"].tap()
-        app.buttons["Pause reminders for 1 hour"].tap()
-        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 5))
+        let turnOff = app.buttons["Turn off reminders…"]
+        XCTAssertTrue(turnOff.waitForExistence(timeout: 5))
+        turnOff.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["For 1 hour"].waitForExistence(timeout: 5))
+        app.buttons["For 1 hour"].tap()
+        XCTAssertTrue(app.buttons["Turn on"].waitForExistence(timeout: 5))
         snap(app, "tour-paused")
-        app.buttons["Resume"].tap()
-        XCTAssertTrue(app.buttons["Pause reminders for 1 hour"].waitForExistence(timeout: 5))
+        app.buttons["Turn on"].tap()
+        XCTAssertTrue(app.buttons["Turn off reminders…"].waitForExistence(timeout: 5))
     }
 
     /// New type… from the edit sheet opens the new type's reminders inside the sheet, and its

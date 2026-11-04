@@ -28,7 +28,7 @@ struct TodayView: View {
                             }
                             .frame(maxWidth: 360)
                             .padding(.vertical, 4)
-                            PauseRow(now: now)
+                            TurnOffRow(now: now)
                                 .padding(.bottom, 4)
                         }
                         .padding(16)
@@ -105,33 +105,47 @@ struct NowReadout: View {
     }
 }
 
-/// Pause reminders for 1 hour, or how long they're paused for, with Resume.
-struct PauseRow: View {
+/// Turn off reminders…, or how long they're off for, with Turn on.
+struct TurnOffRow: View {
     @Environment(AppModel.self) private var model
     let now: Date
 
     var body: some View {
         Group {
-            if let until = model.settings.pausedUntil, now < until {
+            if let status = TurnOff.status(model.settings, now: now) {
                 HStack {
-                    Label("Paused until \(until.timeText)", systemImage: "pause.circle.fill")
+                    Label(status, systemImage: "bell.slash.fill")
                         .font(.subheadline).foregroundStyle(Palette.sun)
-                    Spacer()
-                    Button("Resume") { model.resume() }.font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 8)
+                    Button("Turn on") { model.turnOn() }.font(.subheadline.weight(.semibold))
                 }
             } else {
-                Button {
-                    model.pauseForAnHour()
-                } label: {
-                    Label("Pause reminders for 1 hour", systemImage: "pause.circle")
+                TurnOffMenu {
+                    Label("Turn off reminders…", systemImage: "bell.slash")
                         .font(.subheadline)
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .background(.fill.tertiary, in: .rect(cornerRadius: 10))
                 }
-                .buttonStyle(.bordered)
                 .disabled(!model.onboarded)
             }
         }
-        .sensoryFeedback(.success, trigger: model.settings.pausedUntil)
+        .sensoryFeedback(.success, trigger: model.settings.remindersOff)
+    }
+}
+
+/// The three choices: For 1 hour, For 24 hours, Until I turn them on.
+struct TurnOffMenu<Label: View>: View {
+    @Environment(AppModel.self) private var model
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Menu {
+            Section("Turn off reminders") {
+                ForEach(TurnOff.allCases) { c in Button(c.label) { model.turnOff(c) } }
+            }
+        } label: {
+            label().contentShape(.rect)
+        }
     }
 }
 

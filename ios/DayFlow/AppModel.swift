@@ -158,9 +158,9 @@ final class AppModel {
         if settings.onboarded {
             scheduledCount = await ReminderScheduler.reschedule(planner: planner, store: store)
         }
-        await LiveActivityController.update(planner: planner, enabled: settings.liveActivity && settings.onboarded,
+        await LiveActivityController.update(planner: planner, enabled: settings.liveActivity && settings.onboarded && !isOff,
                                             canStart: isForeground)
-        widgetsAvailable = LiveActivityController.writeWidgetSnapshot(planner: planner)
+        widgetsAvailable = LiveActivityController.writeWidgetSnapshot(planner: planner, offUntil: settings.offUntil(at: Date()))
         lastRefresh = Date()
     }
 
@@ -281,14 +281,19 @@ final class AppModel {
         saveSettings(s)
     }
 
-    /// Pauses every reminder for an hour (banners and sounds); they come back on their own.
-    func pauseForAnHour() {
-        update { $0.pausedUntil = Date().addingTimeInterval(3600) }
+    /// Turns reminders off: nothing rings until they're back on. Every scheduled notification is
+    /// removed and the Live Activity ends, so nothing rings even if you swipe DayFlow away.
+    func turnOff(_ choice: TurnOff) {
+        saveSettings(choice.apply(to: settings))
+        show(TurnOff.status(settings) ?? "Reminders off")
     }
 
-    func resume() { update { $0.pausedUntil = nil } }
+    func turnOn() {
+        saveSettings(TurnOff.turnOn(settings))
+        show("Reminders on")
+    }
 
-    var pausedUntil: Date? { settings.isPaused(at: Date()) ? settings.pausedUntil : nil }
+    var isOff: Bool { settings.isOff(at: Date()) }
 
     // MARK: Notifications and calendars
 

@@ -35,7 +35,7 @@ npm start
 
 On macOS, `npm start` runs DayFlow from a copy of Electron named **DayFlow.app** (made once in `.dev/`, and again whenever Electron or the icon changes), so the menu bar, Dock, notifications and System Settings all say DayFlow rather than Electron. The first time, macOS asks again whether DayFlow may send notifications. If you see an old "Electron" entry under System Settings → Notifications, you can remove it.
 
-DayFlow keeps running in the system tray (menu bar on macOS, where it also shows the minutes left in the current block). Use the tray menu to quit.
+DayFlow keeps running in the system tray (menu bar on macOS, where it also shows the minutes left in the current block). Quit with **Quit DayFlow** in the sidebar, ⌘Q, or the tray menu. To silence it without quitting, **Turn off reminders** (on Today or in the tray menu) for 1 hour, 24 hours, or until you turn them back on; the tray icon is crossed out while they're off. The iPhone app has the same Turn off.
 
 ## The look
 
@@ -53,7 +53,7 @@ Alongside each macOS notification, DayFlow shows a card at the top right of your
 
 Clicking a card's text opens the full window. Any button stops the sound, and clearing a card clears its notification (and the other way round). Up to three cards show at once, newest on top, with "+N more" on the bottom one.
 
-**Settings → General** turns cards off (you'll still get notifications) or has them close on their own after 1 or 5 minutes. **Send a test reminder** shows one. The tray menu has **Pause reminder cards for 1 hour**. macOS doesn't let apps see Focus or Do Not Disturb, so pause cards (or turn them off) when you don't want them.
+**Settings → General** turns cards off (you'll still get notifications) or has them close on their own after 1 or 5 minutes. **Send a test reminder** shows one. macOS doesn't let apps see Focus or Do Not Disturb, so **Turn off reminders** (or turn cards off) when you don't want them.
 
 ## Three ways to run it
 

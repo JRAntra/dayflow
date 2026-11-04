@@ -47,7 +47,7 @@ final class DayFlowUITests: XCTestCase {
         if (2...6).contains(weekday) || weekday == 1 { // a weekday ahead: the window fills up
             XCTAssertTrue(scheduled.label.contains("62 reminders"), scheduled.label)
         }
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Reminders' AND label CONTAINS 'On'")).firstMatch.exists
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Notifications' AND label CONTAINS 'On'")).firstMatch.exists
                       || app.staticTexts["On"].exists, "Notifications should be on")
 
         // The test notification shows a banner while DayFlow is open.
