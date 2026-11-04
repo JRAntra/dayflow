@@ -6,6 +6,8 @@ Everything stays on your computer. The only network traffic is to Google, and on
 
 **New to DayFlow?** The [User Guide](User%20Guide.md) walks through every feature, from installing to reminder cards and backups.
 
+**On iPhone:** a native SwiftUI version lives in [`ios/`](ios/README.md), for iOS 17 or later. It has the same block types, reminders, sounds and export files, with a day view you can drag, a Lock Screen Live Activity and widgets. It's a beta you install from Xcode; see [DayFlow on iPhone](User%20Guide.md#17-dayflow-on-iphone).
+
 ## Install (macOS)
 
 Download the DMG for your Mac from the [latest release](https://github.com/JRAntra/dayflow/releases). Apple menu → **About This Mac** shows both things you need: the macOS version, and *Chip: Apple M…* (Apple Silicon) or *Processor: Intel*.
@@ -175,7 +177,9 @@ src/renderer/card.html   a reminder card (card.css, card.js)
 scripts/dev.js           npm start: builds .dev/DayFlow.app on macOS and runs it
 scripts/build-icons.js   npm run icons: renders assets/*.svg to PNG and .icns
 assets/                  tray and app icons (SVG sources and rendered files)
-assets/sounds/           the 18 built-in reminder sounds (MP3; 17 from Mixkit, plus Class bell)
+assets/sounds/           the 18 built-in reminder sounds (MP3; 17 from Mixkit, plus Class bell),
+                         also bundled in the iPhone app
+ios/                     DayFlow for iPhone (SwiftUI); see ios/README.md
 ```
 
 ## Ideas for later

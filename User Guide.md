@@ -4,6 +4,8 @@ DayFlow runs your day in blocks. You set up the phases of your day once (deep wo
 
 Everything stays on your Mac. The only time DayFlow goes online is to talk to Google, and only if you connect your calendar.
 
+There's also a beta of **DayFlow for iPhone**. Sections 1 to 16 describe the Mac app; [DayFlow on iPhone](#17-dayflow-on-iphone) covers what's different on the phone.
+
 ## Contents
 
 1. [Install DayFlow](#1-install-dayflow)
@@ -22,6 +24,7 @@ Everything stays on your Mac. The only time DayFlow goes online is to talk to Go
 14. [Your data](#14-your-data)
 15. [Troubleshooting](#15-troubleshooting)
 16. [Quick reference](#16-quick-reference)
+17. [DayFlow on iPhone](#17-dayflow-on-iphone)
 
 ---
 
@@ -490,3 +493,135 @@ Only one copy of DayFlow runs at a time; opening it again brings the running cop
 | Back up or share your plan | **Schedule → Export…** |
 | Undo an import | **Schedule → Backups**, then import the newest backup |
 | Quit | Menu bar icon → **Quit DayFlow** |
+
+---
+
+## 17. DayFlow on iPhone
+
+DayFlow for iPhone is the same day planner, built for the phone: the same block types and four reminders, the same sounds, and the same export files. Some things work differently, because iOS runs apps differently from macOS. This section covers what's different. It needs **iOS 17 or later**.
+
+### Install it (beta)
+
+For now the iPhone app isn't on the App Store or TestFlight. You install it from a Mac with Xcode, using a free Apple ID:
+
+1. Install **Xcode** from the Mac App Store, then run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` in Terminal.
+2. In **Xcode → Settings → Accounts**, add your Apple ID. This creates your free "Personal Team".
+3. Get the code: `git clone https://github.com/JRAntra/dayflow.git`, then in `dayflow/ios` run `xcodegen` (install it with `brew install xcodegen`) and open `DayFlow.xcodeproj`.
+4. Select the **DayFlow** target → **Signing & Capabilities** → choose your Personal Team. Do the same for **DayFlowWidgets**.
+5. Connect your iPhone with a cable and tap **Trust**. Turn on **Settings → Privacy & Security → Developer Mode** (the iPhone restarts).
+6. Choose your iPhone at the top of Xcode and press **Run** (▶).
+7. The first time, the iPhone won't open the app until you trust yourself as its developer: **Settings → General → VPN & Device Management** → your Apple ID → **Trust**.
+
+**Every 7 days**, an app signed with a free Apple ID stops opening. Connect the iPhone and press **Run** in Xcode again. Your schedule and settings are kept.
+
+If Xcode can't sign the **App Groups** capability with your free Apple ID, delete the two `com.apple.security.application-groups` entries in `ios/project.yml` and run `xcodegen` again. Only the Home Screen widgets stop working; the Live Activity still works.
+
+### The first time you open it
+
+DayFlow asks how to start your schedule: with the **sample weekday schedule** (the same eight blocks as the Mac), **from a file** (an export AirDropped or saved from your Mac), or **empty**. Then it explains its reminders and asks to send notifications. If you choose **Not now**, Today shows *Reminders are off* until you allow notifications in iOS Settings.
+
+### Around the app
+
+Three tabs at the bottom:
+
+| Tab | What's there |
+|---|---|
+| **Today** | The dial, the current block with its countdown, **Pause reminders for 1 hour**, and today's flow, with meetings and their **Join** buttons |
+| **Schedule** | Your weekly plan as a **List** or one **Day** at a time. **＋** adds a block; **⋯** has **Import…**, **Export…** and **Backups** |
+| **Settings** | **Block types**, **Meetings**, **Sounds**, **Calendars** and **General** |
+
+### Planning your blocks
+
+**List** shows every block, earliest first, with its type, days and length. The day strip (**All · M T W T F S S**) shows one day's blocks.
+
+- **Tap a block** to edit it: name, type, start and end times, and the days it repeats on. **Save** applies the change straight away and updates reminders. There's no separate Save schedule step.
+- **Save** stays greyed out until the block has a name, ends after it starts, and repeats on at least one day. Overlapping blocks are allowed; the block shows which one it overlaps.
+- **＋** adds a block, following the Mac's rule: it starts where your latest block ends, lasts 30 minutes, and copies that block's days and type.
+- **Swipe left** on a block to delete it. **Undo** appears for a few seconds.
+- **New type…** in the Type menu adds a block type and opens its reminders.
+
+**Day** shows one weekday as an hour grid, like the Calendar app:
+
+- **Press and hold** a block, then drag, to move it. Times snap to 5 minutes, with a light tick.
+- A held block shows **handles** at its top and bottom edges. Drag one to change its start or end time. A block can't be shorter than 5 minutes.
+- **Tap** a block to edit it. **Tap an empty slot** to add a 30-minute block there.
+- If the block repeats on several days, DayFlow asks after each change: **This day only** (the block is split off for that day, and the original keeps its other days) or **All N days**. A block on just one day never asks.
+- With VoiceOver, use the actions to move a block, or change its length, 5 minutes at a time.
+
+### How reminders work on iPhone
+
+iOS doesn't let an app run in the background all day, so DayFlow **schedules your reminders ahead of time**, as ordinary iPhone notifications. iOS allows up to 64 scheduled notifications per app, and DayFlow uses up to 62, which is usually three to five days of reminders. It schedules more each time it gets to run: when you open it, change something, or tap a reminder, and when iOS lets it refresh in the background.
+
+If DayFlow hasn't run for several days, the last notification it scheduled says *Open DayFlow to keep your reminders coming*. Open the app, and the next ones are scheduled.
+
+The reminders themselves are the Mac's: the same four per type, the same wording, the same lead times, and the same merge rule (*"the block that's coming up wins"*).
+
+What's different on iPhone:
+
+- **The silent switch and Focus apply.** With the switch on silent, reminders vibrate without a sound. During a Focus, iOS holds DayFlow's notifications back unless you allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.
+- **There's no Snooze** and no reminder cards. Swipe a notification away when you're done with it.
+- **Meeting reminders** with a video link have a **Join** button (press and hold the notification to see it). Tapping the notification joins too. Without a link, the button is **Open in Calendar**.
+- **Tapping a block reminder** opens Today.
+- **Pause reminders for 1 hour** on Today silences sounds and banners for an hour. They come back by themselves, and **Resume** ends the pause early.
+- **Settings → General → Send a test notification** shows what a block starting looks like. **Scheduled ahead** says how far ahead your reminders go.
+
+### Sounds on iPhone
+
+The 18 built-in sounds are the same as the Mac's.
+
+- iOS plays a reminder's sound at your **ringer volume**. DayFlow's **Volume** (Settings → Sounds) sets how loud DayFlow is within that, so it can make sounds quieter than the ringer but never louder.
+- **Fade in** works as on the Mac: the sound starts at 10% and grows to your volume over its first 8 seconds. DayFlow builds the fade and volume into its own copy of each sound, so they work even while the app is closed.
+- Choosing a sound plays it, and **Play** plays it again. **Previews play even when the iPhone is on silent**, because you tapped them; reminders still follow the switch.
+- **Add a clip…** (Settings → Sounds) adds your own sound from Files: mp3, wav, m4a, aac or ogg, up to 5 MB and 30 seconds. iOS may not be able to play some files (OGG in particular). DayFlow checks each clip and tells you if it can't use it.
+
+### Meetings on iPhone
+
+On iPhone, DayFlow reads meetings from **the calendars on your iPhone**, not straight from Google, so there's no Google Cloud setup and no sign-in.
+
+1. Add your Google account to the iPhone if it isn't there: **Settings → Apps → Calendar → Calendar Accounts → Add Account → Google** (on iOS 17: **Settings → Calendar → Accounts**).
+2. In DayFlow, open **Settings → Calendars** and tap **Allow calendar access**. Your default calendar is switched on to start with; switch on any others whose meetings you want reminders for.
+
+The rules are the Mac's: timed events only, skipping all-day, cancelled and declined events. DayFlow finds **Join** links for Google Meet, Zoom, Microsoft Teams and Webex in the event's link, location or notes. Meetings show on Today's dial (the amber outer ring) and timeline, and get the two reminders from **Settings → Meetings**.
+
+If a meeting moves while DayFlow isn't running, its reminder keeps the old time until DayFlow next runs.
+
+### Lock Screen and Home Screen
+
+- **Live Activity:** while a block is running, DayFlow shows it on the Lock Screen and in the Dynamic Island, with its type, the time left, a progress bar and what's next. When the block ends, it shows *Up next* until DayFlow runs again and moves it on. Turn it off in **Settings → General**. The first time, iOS asks whether to allow DayFlow's Live Activities.
+- **Widgets:** add **DayFlow → Current block** to the Home Screen (small or medium) or the Lock Screen. Widgets show the current block and its countdown, and switch blocks by themselves through the day. They need the App Groups capability; if your free Apple ID can't sign it, the widgets say *Open DayFlow*.
+
+### Moving your schedule between Mac and iPhone
+
+The iPhone and Mac use the **same export files**, and each keeps its own schedule, with no automatic sync.
+
+- **Mac → iPhone:** on the Mac, **Schedule → Export…**, then AirDrop the file to the iPhone, or save it to iCloud Drive. On the iPhone, open the file with **DayFlow** (if a preview opens first, tap the share button and choose DayFlow), or use **Schedule → ⋯ → Import…**. You see the same preview as on the Mac before anything changes.
+- **iPhone → Mac:** **Schedule → ⋯ → Export…** opens the share sheet. AirDrop the file to your Mac, then use **Import…** there.
+
+The file's Default type matches your Default, other types match by name, and clips travel inside the file, exactly as on the Mac. Settings that only exist on one device (the Mac's shortcut and card options; the iPhone's Live Activity and calendars) aren't in the file and stay as they are.
+
+### Backups and your data on iPhone
+
+Before every import, DayFlow keeps a backup, the newest 10. Find them in **Schedule → ⋯ → Backups**: tap one to see what restoring it would change, or share it to send it to your Mac. They're also in the **Files** app, under **On My iPhone → DayFlow → Backups**.
+
+Your schedule, types, settings and clips live in DayFlow's own storage on the iPhone, in the same file formats as the Mac's. Deleting the app deletes them, so export first if you want to keep your plan.
+
+### iPhone troubleshooting
+
+**Reminders don't make a sound.**
+Check the silent switch (on silent, reminders only vibrate), then the ringer volume, then **Settings → Sounds → Play sounds** in DayFlow.
+
+**Reminders don't show during a Focus.**
+Allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.
+
+**No reminders at all.**
+Open **Settings → General** in DayFlow. If *Reminders* says *Off*, tap **Open Settings** and allow notifications. If *Scheduled ahead* is missing, open Today once so DayFlow can schedule them.
+
+**The Lock Screen shows a block that has ended.**
+The Live Activity moves on when DayFlow runs. Open the app, or tap a reminder.
+
+**The app won't open any more.**
+With a free Apple ID, the app has to be re-installed from Xcode every 7 days. Connect the iPhone and press **Run** in Xcode.
+
+**A meeting is missing.**
+Check that its calendar is switched on in **Settings → Calendars**, and that it isn't all-day, cancelled or declined.
+
