@@ -231,3 +231,45 @@ dialog.sheet > p { margin: var(--space-2) 0; }
 #imp-settings-row { padding: var(--space-2) 0; }
 .sheet-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
 .pane > .status, .pane > .error { margin: var(--space-3) var(--space-2) 0; }
+
+/* Your clips: the list, files in the Clips folder that aren't clips, and dropping files in */
+.clip-list li .clip-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.clip-list li .clip-name::before { content: ""; width: 14px; height: 14px; flex: none; background: var(--accent); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M1 7h1M4 4v6M7 2v10M10 5v4M13 6v2' stroke='black' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat; }
+.folder-list li .clip-name::before { background: var(--label-3); }
+.folder-list li.piece .clip-name::before { background: var(--sun); }
+.folder-list .clip-name > span { display: flex; flex-direction: column; min-width: 0; }
+.folder-list .why { font-size: var(--text-xs); color: var(--label-2); }
+.clip-list:empty { display: none; }
+.drop-zone { position: relative; transition: box-shadow var(--dur-fast), background var(--dur-fast); }
+.drop-zone .drop-hint { display: none; }
+.drop-zone.dragging { box-shadow: 0 0 0 2px var(--accent); background: var(--accent-faint); }
+.drop-zone.dragging .drop-hint {
+  display: flex; align-items: center; justify-content: center; position: absolute; inset: 0;
+  border-radius: inherit; color: var(--accent); font-weight: 600; background: color-mix(in srgb, var(--card-solid) 70%, transparent);
+}
+#pane-sounds .pane-foot { gap: var(--space-4); }
+
+/* Record a clip, Choose 30 seconds, help */
+.clip-sheet { width: min(460px, calc(100vw - 48px)); }
+.clip-sheet h3 { font-size: var(--text-md); margin: var(--space-4) 0 var(--space-1); }
+.clip-sheet p { margin: var(--space-2) 0; }
+.small-sheet { width: min(380px, calc(100vw - 48px)); }
+.small-sheet input[type="text"] { width: 100%; }
+.rec-time { font-size: 48px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.rec-caption { text-align: center; min-height: 2.6em; }
+.rec-meter { display: flex; gap: 3px; height: 30px; align-items: stretch; margin: var(--space-3) var(--space-6); }
+.rec-meter i { flex: 1; border-radius: 3px; background: var(--well); }
+.rec-meter i.on { background: var(--accent); }
+.rec-meter i.on.hot { background: var(--sun); }
+.rec-button { display: block; margin: var(--space-3) auto; width: 72px; height: 72px; border-radius: 50%; border: 3px solid var(--border); background: none; padding: 0; cursor: default; }
+.rec-button span { display: block; margin: auto; width: 56px; height: 56px; border-radius: 50%; background: #E5443B; transition: all var(--dur-base) var(--ease-spring); }
+.rec-button.recording span { width: 26px; height: 26px; border-radius: 6px; }
+.rec-button:disabled { opacity: 0.4; }
+.rec-after .rec-actions { display: flex; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+.rec-after .row, .piece-dialog .row, #piece-dialog .row { padding: 8px 0; }
+.rec-after input[type="text"] { width: 220px; }
+.piece-row { display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-3); }
+.piece-range { font-variant-numeric: tabular-nums; font-size: var(--text-lg); }
+#piece-start { width: 100%; margin: var(--space-3) 0; }
+.help-list { margin: 0; padding-left: 1.2em; }
+.help-list li { margin: 4px 0; }

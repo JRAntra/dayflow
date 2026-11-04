@@ -3,7 +3,7 @@
 // and the Google Calendar connection. The window is just a view onto this.
 
 const {
-  app, BrowserWindow, Tray, Menu, Notification, ipcMain, shell, nativeImage, dialog, globalShortcut, screen,
+  app, BrowserWindow, Tray, Menu, Notification, ipcMain, shell, nativeImage, dialog, globalShortcut, screen, systemPreferences,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -85,11 +85,22 @@ const BUILTIN_DIR = path.join(__dirname, '..', 'assets', 'sounds');
 const CLIP_TYPES = ['mp3', 'wav', 'm4a', 'aac', 'ogg'];
 const MAX_CLIP_BYTES = 5 * 1024 * 1024;
 
-// Your own clips: [{ id, name, ext }], with the audio copied to sounds/<id>.<ext>.
-// The id is a hash of the audio, so the same clip is only ever stored once.
+// Your own clips: [{ id, name, ext, file }]. The id is a hash of the audio, so reminders and
+// export files keep finding a clip whatever its file is called; `file` is its file in the Clips
+// folder, e.g. "Ding.mp3". The folder is ~/Music/DayFlow Clips, where you can add, rename and
+// delete clips in Finder (inside the data folder instead when DayFlow runs with --user-data-dir).
+// Clips saved before the folder existed were kept as sounds/<id>.<ext> and are moved in.
 let customSounds = readJSON(FILES.sounds, []);
+const CLIPS_DIR = app.commandLine.hasSwitch('user-data-dir')
+  ? path.join(DATA_DIR, 'Clips')
+  : path.join(app.getPath('music'), 'DayFlow Clips');
+const ORIGINALS_DIR = path.join(CLIPS_DIR, 'Originals');
+const MAX_SOURCE_BYTES = 200 * 1024 * 1024; // the largest file a 30-second piece can come from
+const MAX_HASH_BYTES = 40 * 1024 * 1024;
+// Files in the folder that aren't clips: [{ file, problem: 'piece' | 'unusable', seconds?, message }]
+let folderFiles = [];
 
-const clipPath = (c) => path.join(SOUNDS_DIR, `${c.id}.${c.ext}`);
+const clipPath = (c) => path.join(CLIPS_DIR, c.file || `${c.id}.${c.ext}`);
 const clipHash = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
 const customId = (id) => `custom:${id}`;
 
@@ -106,29 +117,82 @@ function checkClip(name, ext, buf) {
   return type;
 }
 
-// Copies a clip into the sounds folder. A different clip whose name is taken becomes "Name (2)".
+// A file name made from a clip name: no slashes, colons or leading dots.
+function safeFileName(name) {
+  let s = String(name).replace(/[/:\\]/g, '-').trim().replace(/^\.+/, '');
+  return s.slice(0, 60) || 'Sound clip';
+}
+
+// "Name", or "Name (2)"… if another clip has that name (ignoring case).
+function uniqueClipName(base, exceptId = null) {
+  const taken = new Set(customSounds.filter((c) => c.id !== exceptId).map((c) => c.name.toLowerCase()));
+  let label = base;
+  for (let n = 2; taken.has(label.toLowerCase()); n++) label = `${base} (${n})`;
+  return label;
+}
+
+// "Name.ext", or "Name (2).ext"… if that file already exists in the folder.
+function uniqueFileName(base, ext, dir = CLIPS_DIR, except = null) {
+  let existing = [];
+  try { existing = fs.readdirSync(dir).map((f) => f.toLowerCase()); } catch {}
+  const taken = new Set(existing.filter((f) => f !== String(except || '').toLowerCase()));
+  let file = `${base}.${ext}`;
+  for (let n = 2; taken.has(file.toLowerCase()); n++) file = `${base} (${n}).${ext}`;
+  return file;
+}
+
+// Clips kept as sounds/<id>.<ext> before the Clips folder move in, under their names.
+function moveLegacyClips() {
+  let moved = false;
+  for (const c of customSounds) {
+    if (c.file) continue;
+    const old = path.join(SOUNDS_DIR, `${c.id}.${c.ext}`);
+    if (!fs.existsSync(old)) continue;
+    try {
+      fs.mkdirSync(CLIPS_DIR, { recursive: true });
+      const file = uniqueFileName(safeFileName(c.name), c.ext);
+      fs.renameSync(old, path.join(CLIPS_DIR, file));
+      c.file = file;
+      moved = true;
+    } catch (e) {
+      try { // a different disk: copy, then delete
+        const file = uniqueFileName(safeFileName(c.name), c.ext);
+        fs.copyFileSync(old, path.join(CLIPS_DIR, file));
+        fs.unlinkSync(old);
+        c.file = file;
+        moved = true;
+      } catch { console.error(`Couldn't move ${c.name} into the Clips folder:`, e.message); }
+    }
+  }
+  if (moved) {
+    writeJSON(FILES.sounds, customSounds);
+    try { if (!fs.readdirSync(SOUNDS_DIR).length) fs.rmdirSync(SOUNDS_DIR); } catch {}
+  }
+}
+
+// Copies a clip into the Clips folder. The same audio is only ever stored once; a different clip
+// whose name is taken becomes "Name (2)", and so does its file.
 function installClip(name, ext, buf) {
   const type = checkClip(name, ext, buf);
   const id = clipHash(buf);
   const existing = customSounds.find((c) => c.id === id);
   if (existing) return existing;
-  const base = String(name).trim().slice(0, 60) || 'Sound clip';
-  let label = base;
-  for (let n = 2; customSounds.some((c) => c.name === label); n++) label = `${base} (${n})`;
-  const clip = { id, name: label, ext: type };
-  fs.mkdirSync(SOUNDS_DIR, { recursive: true });
-  fs.writeFileSync(clipPath(clip), buf);
+  const label = uniqueClipName(String(name).trim().slice(0, 60) || 'Sound clip');
+  fs.mkdirSync(CLIPS_DIR, { recursive: true });
+  const file = uniqueFileName(safeFileName(label), type);
+  fs.writeFileSync(path.join(CLIPS_DIR, file), buf);
+  const clip = { id, name: label, ext: type, file };
   customSounds.push(clip);
   writeJSON(FILES.sounds, customSounds);
   return clip;
 }
 
-// Deletes a clip; any reminder that used it goes back to that reminder's starting sound.
-// Returns the names of the reminders that changed.
+// Removes a clip; any reminder that used it goes back to that reminder's starting sound.
+// Returns the names of the reminders that changed. The file is left to the caller (moved to the
+// Trash by Remove, or already gone when you deleted it in Finder).
 function removeClip(id) {
   const clip = customSounds.find((c) => c.id === id);
   if (!clip) return [];
-  try { fs.unlinkSync(clipPath(clip)); } catch {}
   customSounds = customSounds.filter((c) => c !== clip);
   writeJSON(FILES.sounds, customSounds);
   const reset = [];
@@ -146,6 +210,148 @@ function removeClip(id) {
     writeJSON(FILES.settings, settings);
   }
   return reset;
+}
+
+// Renames a clip and its file. Reminders that use it keep it.
+function renameClip(id, newName) {
+  const name = String(newName || '').trim().slice(0, 60);
+  if (!name) throw new Error('A clip needs a name.');
+  const clip = customSounds.find((c) => c.id === id);
+  if (!clip) throw new Error('That clip has been removed.');
+  if (customSounds.some((c) => c.id !== id && c.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error(`There's already a clip called "${name}".`);
+  }
+  const file = uniqueFileName(safeFileName(name), clip.ext, CLIPS_DIR, clip.file);
+  if (file !== clip.file) fs.renameSync(clipPath(clip), path.join(CLIPS_DIR, file));
+  clip.name = name;
+  clip.file = file;
+  writeJSON(FILES.sounds, customSounds);
+  return clip;
+}
+
+// How long a file plays, worked out by the window (Web Audio decodes every format DayFlow takes,
+// ogg included). Resolves to { seconds } or { error }, or null if the window can't check now.
+const inspections = new Map();
+function inspectInWindow(file) {
+  if (!win || win.isDestroyed() || !winReady) return Promise.resolve(null);
+  const token = crypto.randomUUID();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { inspections.delete(token); resolve(null); }, 20000);
+    inspections.set(token, (result) => { clearTimeout(timer); inspections.delete(token); resolve(result); });
+    win.webContents.send('inspect-clip', { token, data: fs.readFileSync(file) });
+  });
+}
+
+// Brings the clip list in line with the Clips folder. A file with the same audio as a clip whose
+// file is gone is that clip, renamed; other new files are checked and added, or listed with what's
+// wrong. Clips whose file is gone are removed. If the folder can't be read, nothing is removed.
+let scanning = null;
+let scanAgain = false;
+function scanClipsFolder() {
+  if (scanning) { scanAgain = true; return scanning; }
+  scanning = (async () => {
+    const result = { added: [], renamed: [], removed: [], reset: [] };
+    try {
+      fs.mkdirSync(CLIPS_DIR, { recursive: true });
+      const names = fs.readdirSync(CLIPS_DIR, { withFileTypes: true })
+        .filter((d) => d.isFile() && !d.name.startsWith('.')).map((d) => d.name)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      const lower = new Set(names.map((n) => n.toLowerCase()));
+      const known = new Set(customSounds.map((c) => (c.file || '').toLowerCase()));
+      let missing = customSounds.filter((c) => !lower.has((c.file || `${c.id}.${c.ext}`).toLowerCase()));
+      const others = [];
+      for (const name of names) {
+        if (known.has(name.toLowerCase())) continue;
+        const full = path.join(CLIPS_DIR, name);
+        const { name: base, ext: dotExt } = path.parse(name);
+        const ext = dotExt.slice(1).toLowerCase();
+        const unusable = (message) => others.push({ file: name, problem: 'unusable', message });
+        if (!CLIP_TYPES.includes(ext)) { unusable("Isn't an mp3, wav, m4a, aac or ogg file."); continue; }
+        const size = fs.statSync(full).size;
+        if (!size) { unusable('The file is empty.'); continue; }
+        if (size > MAX_SOURCE_BYTES) { unusable('Larger than 200 MB.'); continue; }
+        if (size <= MAX_HASH_BYTES) {
+          const id = clipHash(fs.readFileSync(full));
+          const renamed = missing.find((c) => c.id === id);
+          if (renamed) { // you renamed it in Finder
+            missing = missing.filter((c) => c !== renamed);
+            renamed.file = name;
+            renamed.ext = ext;
+            renamed.name = uniqueClipName(base, id);
+            result.renamed.push(renamed.name);
+            continue;
+          }
+          const twin = customSounds.find((c) => c.id === id);
+          if (twin) { unusable(`The same sound as ${twin.name}.`); continue; }
+        }
+        const info = await inspectInWindow(full);
+        if (!info) { others.push({ file: name, problem: 'unchecked', message: 'Not checked yet.' }); continue; }
+        if (info.error) { unusable("DayFlow can't play this file. Try converting it to mp3 or wav."); continue; }
+        if (info.seconds > 30.5 || size > MAX_CLIP_BYTES) {
+          others.push({ file: name, problem: 'piece', seconds: info.seconds,
+            message: `${Math.round(info.seconds)} seconds. Choose 30 seconds of it to use it.` });
+          continue;
+        }
+        const data = fs.readFileSync(full);
+        const clip = { id: clipHash(data), name: uniqueClipName(base), ext, file: name };
+        customSounds.push(clip);
+        result.added.push(clip.name);
+      }
+      for (const gone of missing) { // you deleted or moved it in Finder
+        result.reset.push(...removeClip(gone.id));
+        result.removed.push(gone.name);
+      }
+      folderFiles = others;
+      if (result.added.length || result.renamed.length || result.removed.length) {
+        writeJSON(FILES.sounds, customSounds);
+      }
+    } catch (e) {
+      console.error("Couldn't read the Clips folder:", e.message);
+    }
+    return result;
+  })();
+  return scanning.then(async (result) => {
+    scanning = null;
+    if (result.added.length || result.renamed.length || result.removed.length) {
+      send('data-changed');
+      const parts = [];
+      const list = (names) => (names.length <= 2 ? names.join(' and ') : `${names.length} clips`);
+      if (result.added.length) parts.push(`Added ${list(result.added)} from the Clips folder.`);
+      if (result.removed.length) {
+        parts.push(`${list(result.removed)} left the Clips folder${result.reset.length ? `, so ${result.reset.join(', ')} went back to the starting sound` : ''}.`);
+      }
+      if (parts.length) send('toast', parts.join(' '));
+    }
+    if (scanAgain) { scanAgain = false; return scanClipsFolder(); }
+    return result;
+  });
+}
+
+// Watches the folder, so a file you drop in, rename or delete in Finder shows up straight away.
+let clipsWatcher = null;
+function watchClipsFolder() {
+  try {
+    fs.mkdirSync(CLIPS_DIR, { recursive: true });
+    let timer = null;
+    clipsWatcher = fs.watch(CLIPS_DIR, () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => scanClipsFolder(), 600);
+    });
+  } catch (e) {
+    console.error("Couldn't watch the Clips folder:", e.message);
+  }
+}
+
+// Saves a 30-second piece as "<name> (clip)". A song from the Clips folder then moves into
+// Originals, so it isn't listed any more and nothing of yours is deleted.
+function savePiece(name, buf, source) {
+  const clip = installClip(`${name} (clip)`, 'wav', buf);
+  if (source && path.dirname(path.resolve(source)) === path.resolve(CLIPS_DIR) && fs.existsSync(source)) {
+    fs.mkdirSync(ORIGINALS_DIR, { recursive: true });
+    const { name: base, ext } = path.parse(source);
+    fs.renameSync(source, path.join(ORIGINALS_DIR, uniqueFileName(base, ext.slice(1), ORIGINALS_DIR)));
+  }
+  return clip;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +489,7 @@ let blockTypes;
 // Loads your data, upgrading it first if it was saved before reminders lived on block types.
 // Called once the app is ready, so the upgrade can save a backup.
 function loadData() {
+  moveLegacyClips();
   const raw = {
     schedule: readJSON(FILES.schedule, null),
     settings: readJSON(FILES.settings, {}),
@@ -930,6 +1137,9 @@ function createWindow() {
   win.once('ready-to-show', () => {
     winReady = true;
     if (showWhenReady) showWindow();
+    // The window checks new clips (how long they play), so the folder is scanned once it's up.
+    scanClipsFolder();
+    if (!clipsWatcher) watchClipsFolder();
   });
 
   // Closing Full drops you into your usual compact mode; closing a peek just hides it.
@@ -1326,6 +1536,8 @@ function registerIpc() {
     settings,
     google: googleStatus(),
     customSounds,
+    folderFiles,
+    clipsFolder: CLIPS_DIR,
     builtinSounds: BUILTIN,
     blockTypes,
     mode,
@@ -1375,7 +1587,17 @@ function registerIpc() {
     return fs.readFileSync(clipPath(clip));
   });
 
-  // Reads a clip you pick so the window can check that it plays; add-sound then stores it.
+  // Reads a sound you pick (or drop on Your clips) so the window can check it: a short one is
+  // then stored with add-sound, a long one opens Choose 30 seconds.
+  const readSoundFile = (file) => {
+    const { name, ext } = path.parse(file);
+    const type = ext.slice(1).toLowerCase();
+    if (!CLIP_TYPES.includes(type)) throw new Error(`"${name}" isn't an mp3, wav, m4a, aac or ogg file.`);
+    const size = fs.statSync(file).size;
+    if (!size) throw new Error(`"${name}" is empty.`);
+    if (size > MAX_SOURCE_BYTES) throw new Error(`"${name}" is larger than 200 MB.`);
+    return { name, ext: type, data: fs.readFileSync(file), path: file, inFolder: path.dirname(path.resolve(file)) === path.resolve(CLIPS_DIR) };
+  };
   ipcMain.handle('pick-sound-file', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: 'Choose a sound clip',
@@ -1383,22 +1605,92 @@ function registerIpc() {
       properties: ['openFile'],
     });
     if (canceled || !filePaths[0]) return null;
-    const file = filePaths[0];
-    const { name, ext } = path.parse(file);
-    if (fs.statSync(file).size > MAX_CLIP_BYTES) throw new Error(`"${name}" is larger than 5 MB.`);
-    const data = fs.readFileSync(file);
-    return { name, ext: checkClip(name, ext.slice(1), data), data };
+    return readSoundFile(filePaths[0]);
   });
+  ipcMain.handle('read-sound-file', (_e, file) => readSoundFile(String(file)));
+  // A file in the Clips folder, by name (for Choose 30 seconds on a song you put there).
+  ipcMain.handle('read-folder-file', (_e, name) => readSoundFile(path.join(CLIPS_DIR, path.basename(String(name)))));
 
   ipcMain.handle('add-sound', (_e, { name, ext, data }) => {
     const clip = installClip(name, ext, Buffer.from(data));
     return { clip, customSounds };
   });
 
-  ipcMain.handle('remove-sound', (_e, id) => {
+  ipcMain.handle('save-piece', (_e, { name, data, source }) => {
+    const clip = savePiece(String(name), Buffer.from(data), source ? String(source) : null);
+    scanClipsFolder();
+    return { clip, customSounds };
+  });
+
+  // Remove moves the clip's file to the Trash, so you can put it back.
+  ipcMain.handle('remove-sound', async (_e, id) => {
+    const clip = customSounds.find((c) => c.id === id);
+    if (clip && fs.existsSync(clipPath(clip))) {
+      try { await shell.trashItem(clipPath(clip)); } catch { fs.unlinkSync(clipPath(clip)); }
+    }
     const reset = removeClip(id);
     return { reset, customSounds, settings, blockTypes };
   });
+
+  ipcMain.handle('rename-sound', (_e, { id, name }) => {
+    const clip = renameClip(String(id), name);
+    return { clip, customSounds };
+  });
+
+  // Deletes a file in the Clips folder that isn't a clip (one DayFlow can't use), to the Trash.
+  ipcMain.handle('trash-folder-file', async (_e, name) => {
+    const file = path.join(CLIPS_DIR, path.basename(String(name)));
+    if (fs.existsSync(file)) await shell.trashItem(file);
+    await scanClipsFolder();
+    return folderFiles;
+  });
+
+  ipcMain.handle('open-clips-folder', () => {
+    fs.mkdirSync(CLIPS_DIR, { recursive: true });
+    return shell.openPath(CLIPS_DIR);
+  });
+
+  ipcMain.handle('scan-clips', async () => {
+    await scanClipsFolder();
+    return { customSounds, folderFiles };
+  });
+
+  ipcMain.on('inspect-clip-result', (_e, { token, seconds, error }) => {
+    inspections.get(token)?.(error ? { error } : { seconds });
+  });
+
+  // Native pop-up menus: Add a clip ▾, and ⋯ on a clip. Resolve to the chosen item's id.
+  const popup = (items) => new Promise((resolve) => {
+    let chosen = null;
+    const menu = Menu.buildFromTemplate(items.map((it) => (it === '-' ? { type: 'separator' } : { label: it.label, click: () => { chosen = it.id; } })));
+    menu.popup({ window: win, callback: () => setTimeout(() => resolve(chosen), 0) });
+  });
+  ipcMain.handle('add-clip-menu', () => popup([
+    { id: 'record', label: 'Record a clip…' },
+    { id: 'choose', label: 'Choose a file…' },
+    '-',
+    { id: 'help', label: 'How do I add music?' },
+  ]));
+  ipcMain.handle('clip-menu', () => popup([
+    { id: 'rename', label: 'Rename…' },
+    { id: 'reveal', label: 'Show in Finder' },
+    '-',
+    { id: 'remove', label: 'Remove' },
+  ]));
+  ipcMain.handle('reveal-sound', (_e, id) => {
+    const clip = customSounds.find((c) => c.id === id);
+    if (clip) shell.showItemInFolder(clipPath(clip));
+  });
+
+  // macOS asks once for the microphone; false if you've turned it off in System Settings.
+  ipcMain.handle('ask-microphone', async () => {
+    if (process.platform !== 'darwin') return true;
+    const status = systemPreferences.getMediaAccessStatus('microphone');
+    if (status === 'granted') return true;
+    if (status === 'denied' || status === 'restricted') return false;
+    return systemPreferences.askForMediaAccess('microphone');
+  });
+  ipcMain.handle('open-microphone-settings', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'));
 
   // Block types --------------------------------------------------------------
 

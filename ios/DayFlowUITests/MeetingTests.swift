@@ -4,9 +4,7 @@ import XCTest
 /// the notes, and the meeting on Today.
 final class MeetingTests: XCTestCase {
     func testMeetingFromTheCalendar() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTestReset", "-uiTestOnboarded", "-uiTestMeeting"]
-        app.launch()
+        let app = XCUIApplication.launchFresh(["-uiTestReset", "-uiTestOnboarded", "-uiTestMeeting"])
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         app.buttons["Settings"].tap()
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Calendars'")).firstMatch.tap()

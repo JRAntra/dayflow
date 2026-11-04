@@ -4,9 +4,7 @@ import XCTest
 /// Screen in the Dynamic Island. Screenshots are kept for a look.
 final class LiveActivityTests: XCTestCase {
     func testLiveActivityShowsOutsideTheApp() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTestReset", "-uiTestOnboarded"]
-        app.launch()
+        let app = XCUIApplication.launchFresh(["-uiTestReset", "-uiTestOnboarded"])
         XCTAssertTrue(app.staticTexts["Today's flow"].waitForExistence(timeout: 10))
         sleep(3) // the first refresh starts the activity
         XCUIDevice.shared.press(.home)

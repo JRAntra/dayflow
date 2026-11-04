@@ -42,7 +42,10 @@
           ]
         }
       ],
-      "artifactName": "DayFlow-${version}-${arch}.${ext}"
+      "artifactName": "DayFlow-${version}-${arch}.${ext}",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "DayFlow uses the microphone only when you record a clip."
+      }
     },
     "win": {
       "target": "nsis",

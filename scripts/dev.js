@@ -20,7 +20,8 @@ function devApp() {
   const app = path.join(DEV_DIR, `${NAME}.app`);
   const icon = path.join(ROOT, 'assets', 'icon.icns');
   const iconHash = fs.existsSync(icon) ? crypto.createHash('sha1').update(fs.readFileSync(icon)).digest('hex') : 'none';
-  const stamp = [require('electron/package.json').version, iconHash, NAME, BUNDLE_ID].join('|');
+  const MIC = 'DayFlow uses the microphone only when you record a clip.';
+  const stamp = [require('electron/package.json').version, iconHash, NAME, BUNDLE_ID, MIC].join('|');
   const stampFile = path.join(DEV_DIR, 'stamp');
   const binary = path.join(app, 'Contents', 'MacOS', 'Electron');
   if (fs.existsSync(binary) && fs.existsSync(stampFile) && fs.readFileSync(stampFile, 'utf8') === stamp) return binary;
@@ -38,6 +39,7 @@ function devApp() {
   set('CFBundleName', NAME);
   set('CFBundleDisplayName', NAME);
   set('CFBundleIdentifier', BUNDLE_ID);
+  set('NSMicrophoneUsageDescription', `"${MIC}"`);
   if (iconHash !== 'none') {
     fs.copyFileSync(icon, path.join(app, 'Contents', 'Resources', 'dayflow.icns'));
     set('CFBundleIconFile', 'dayflow.icns');

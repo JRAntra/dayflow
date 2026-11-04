@@ -36,7 +36,16 @@ struct RootView: View {
             }
         }
         .animation(.snappy, value: model.banner?.id)
+        // Choose 30 seconds, from Sounds or from a song shared or AirDropped to DayFlow.
+        .sheet(item: $model.pieceRequest) { r in PieceSheet(request: r) }
         #if DEBUG
+        // UI tests check this to know the app really started with their launch options (the
+        // Simulator sometimes hands them an app that's already running without them).
+        .overlay(alignment: .topLeading) {
+            Text(ProcessInfo.processInfo.arguments.dropFirst().joined(separator: " "))
+                .font(.system(size: 1)).opacity(0.02).allowsHitTesting(false)
+                .accessibilityIdentifier("launch-arguments")
+        }
         // For testing in the Simulator: `simctl launch … -startTab schedule` opens that tab.
         .onAppear {
             switch UserDefaults.standard.string(forKey: "startTab") {

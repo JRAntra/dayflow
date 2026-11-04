@@ -77,6 +77,7 @@ async function loadAll() {
   state.settings = all.settings;
   state.google = all.google;
   state.customSounds = all.customSounds;
+  state.folderFiles = all.folderFiles || [];
   state.builtinSounds = all.builtinSounds;
   if (!typesTimer) state.blockTypes = all.blockTypes;
   state.shortcutActive = all.shortcutActive;
@@ -690,51 +691,388 @@ function soundOptions() {
   return `<optgroup label="Built-in">${builtIn}</optgroup>${mine ? `<optgroup label="Your clips">${mine}</optgroup>` : ''}`;
 }
 
+// Your clips live in the Clips folder (Music › DayFlow Clips). The list shows them, then any file
+// in the folder that isn't a clip: a long song waiting for its 30 seconds, or one DayFlow can't use.
 let clipsShown = null;
 function renderSounds() {
   // Rebuild the lists only when your clips change, so an open dropdown isn't disturbed.
-  const sig = JSON.stringify(state.customSounds);
-  if (sig !== clipsShown) {
-    clipsShown = sig;
-    $('clip-list').innerHTML = state.customSounds.map((c) => `
-      <li><span>${esc(c.name)}</span>
-        <span><button class="btn small" data-play-clip="${esc(c.id)}" aria-label="Play ${esc(c.name)}">▶</button>
-        <button class="btn small ghost" data-remove-clip="${esc(c.id)}">Remove</button></span></li>`).join('');
-    $('clip-empty').hidden = state.customSounds.length > 0;
-    $('clip-list').querySelectorAll('[data-play-clip]').forEach((btn) => {
-      btn.addEventListener('click', () => play(`custom:${btn.dataset.playClip}`, null, $('set-volume').value));
+  const sig = JSON.stringify([state.customSounds, state.folderFiles]);
+  if (sig === clipsShown) return;
+  clipsShown = sig;
+  $('clip-list').innerHTML = state.customSounds.map((c) => `
+    <li><span class="clip-name">${esc(c.name)}</span>
+      <span><button class="btn small" data-play-clip="${esc(c.id)}" aria-label="Play ${esc(c.name)}">▶</button>
+      <button class="btn small ghost icon" data-clip-menu="${esc(c.id)}" aria-label="More for ${esc(c.name)}" aria-haspopup="menu">⋯</button></span></li>`).join('');
+  $('folder-list').innerHTML = (state.folderFiles || []).map((f) => `
+    <li class="${f.problem}"><span class="clip-name"><span>${esc(f.problem === 'piece' ? f.file.replace(/\.[^.]+$/, '') : f.file)}<span class="why">${esc(f.problem === 'piece' ? `Too long: ${f.message}` : f.message)}</span></span></span>
+      <span>${f.problem === 'piece'
+        ? `<button class="btn small" data-piece="${esc(f.file)}">Choose 30 seconds…</button>`
+        : f.problem === 'unusable' ? `<button class="btn small ghost" data-trash-file="${esc(f.file)}">Move to Trash</button>` : ''}</span></li>`).join('');
+  $('clip-empty-row').hidden = state.customSounds.length + (state.folderFiles || []).length > 0;
+  $('clip-list').querySelectorAll('[data-play-clip]').forEach((btn) => {
+    btn.addEventListener('click', () => play(`custom:${btn.dataset.playClip}`, null, $('set-volume').value));
+  });
+  $('clip-list').querySelectorAll('[data-clip-menu]').forEach((btn) => {
+    btn.addEventListener('click', () => clipMenu(btn.dataset.clipMenu));
+  });
+  $('folder-list').querySelectorAll('[data-piece]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try { await openSound(await dayflow.readFolderFile(btn.dataset.piece)); } catch (e) { soundsStatus(cleanError(e), true); }
     });
-    $('clip-list').querySelectorAll('[data-remove-clip]').forEach((btn) => {
-      btn.addEventListener('click', () => removeClip(btn.dataset.removeClip));
-    });
-  }
+  });
+  $('folder-list').querySelectorAll('[data-trash-file]').forEach((btn) => {
+    btn.addEventListener('click', async () => { state.folderFiles = await dayflow.trashFolderFile(btn.dataset.trashFile); renderSounds(); });
+  });
 }
 
-$('add-clip').addEventListener('click', async (e) => {
-  const status = groupStatus(e.currentTarget);
+const soundsStatus = (msg, err = false) => flashStatus(groupStatus($('clip-list')), msg, err);
+const bytesOf = (data) => (data instanceof Uint8Array ? data : new Uint8Array(data));
+const decode = (data) => ctx().decodeAudioData(toArrayBuffer(bytesOf(data)));
+
+// The main process asks how long a file in the Clips folder plays.
+dayflow.onInspectClip(async (data) => (await decode(data)).duration);
+dayflow.onToast((msg) => { toast(msg); });
+
+$('add-clip').addEventListener('click', async () => {
+  const choice = await dayflow.addClipMenu();
+  if (choice === 'record') openRecorder();
+  else if (choice === 'choose') chooseSound();
+  else if (choice === 'help') $('clip-help').showModal();
+});
+$('open-clips').addEventListener('click', () => dayflow.openClipsFolder());
+$('help-open-folder').addEventListener('click', () => dayflow.openClipsFolder());
+$('help-done').addEventListener('click', () => $('clip-help').close());
+
+async function chooseSound() {
   try {
     const picked = await dayflow.pickSoundFile();
-    if (!picked) return;
-    await checkClipPlays(picked.name, picked.data);
-    const { clip } = await dayflow.addSound(picked);
-    await loadAll();
-    flashStatus(status, `Added "${clip.name}". Pick it for any reminder above.`);
-  } catch (err) {
-    flashStatus(status, cleanError(err), true);
+    if (picked) await openSound(picked);
+  } catch (e) { soundsStatus(cleanError(e), true); }
+}
+
+// A sound you picked, dropped or put in the folder: a short one becomes a clip; a long one (over
+// 30 seconds, or over 5 MB) opens Choose 30 seconds.
+async function openSound({ name, ext, data, path, inFolder }) {
+  let buffer;
+  try { buffer = await decode(data); } catch {
+    throw new Error(`DayFlow can't play "${name}". Try converting it to mp3 or wav.`);
   }
-});
+  if (buffer.duration > MAX_CLIP_SECONDS + 0.5 || bytesOf(data).length > 5 * 1024 * 1024) {
+    openPiece({ name, buffer, source: inFolder ? path : null });
+    return;
+  }
+  if (inFolder) { await dayflow.scanClips(); await loadAll(); return; }
+  const { clip } = await dayflow.addSound({ name, ext, data });
+  await loadAll();
+  soundsStatus(`Added "${clip.name}". Choose it in any reminder's sound menu.`);
+}
+
+// Drag sound files from Finder onto Your clips.
+{
+  const zone = $('clip-group');
+  let depth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; zone.classList.add('dragging'); });
+  zone.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+  zone.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; zone.classList.remove('dragging'); } });
+  zone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    depth = 0;
+    zone.classList.remove('dragging');
+    for (const file of [...e.dataTransfer.files]) {
+      try { await openSound(await dayflow.readSoundFile(dayflow.pathForFile(file))); } catch (err) { soundsStatus(cleanError(err), true); }
+    }
+  });
+  // A file dropped anywhere else in the window mustn't navigate away from DayFlow.
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+}
+
+// ⋯ on a clip: Rename…, Show in Finder, Remove.
+async function clipMenu(id) {
+  const clip = state.customSounds.find((c) => c.id === id);
+  if (!clip) return;
+  const choice = await dayflow.clipMenu();
+  if (choice === 'rename') openRename(clip);
+  else if (choice === 'reveal') dayflow.revealSound(id);
+  else if (choice === 'remove') removeClip(id);
+}
 
 async function removeClip(id) {
-  const status = groupStatus($('clip-list'));
   const name = state.customSounds.find((c) => c.id === id)?.name || 'that clip';
+  if (!window.confirm(`Remove "${name}"? Its file moves to the Trash. Reminders that use it go back to their starting sound.`)) return;
   stopSound();
   const { reset } = await dayflow.removeSound(id);
   clipCache.delete(`custom:${id}`);
   await loadAll();
-  flashStatus(status, reset.length
+  soundsStatus(reset.length
     ? `Removed "${name}". ${reset.join(', ')} went back to the starting sound.`
-    : `Removed "${name}".`);
+    : `Removed "${name}". Its file is in the Trash.`);
 }
+
+let renaming = null;
+function openRename(clip) {
+  renaming = clip;
+  $('rename-input').value = clip.name;
+  $('rename-error').textContent = '';
+  $('rename-dialog').showModal();
+  $('rename-input').select();
+}
+async function saveRename() {
+  try {
+    const { clip } = await dayflow.renameSound(renaming.id, $('rename-input').value);
+    $('rename-dialog').close();
+    await loadAll();
+    soundsStatus(`Renamed to "${clip.name}".`);
+  } catch (e) { $('rename-error').textContent = cleanError(e); }
+}
+$('rename-save').addEventListener('click', saveRename);
+$('rename-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveRename(); } });
+$('rename-cancel').addEventListener('click', () => $('rename-dialog').close());
+
+// Clips are written as 16-bit WAV (one channel), which every DayFlow plays: about 2.8 MB for 30 s.
+function encodeWav(samples, rate) {
+  const out = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const str = (o, t) => [...t].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); out.setUint32(4, 36 + samples.length * 2, true); str(8, 'WAVEfmt ');
+  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+  out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true);
+  str(36, 'data'); out.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i])) * 0x7fff, true);
+  return new Uint8Array(out.buffer);
+}
+
+// One channel from an AudioBuffer: the average of its channels.
+function mono(buffer, from = 0, to = buffer.length) {
+  const out = new Float32Array(to - from);
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = from; i < to; i++) out[i - from] += d[i] / buffer.numberOfChannels;
+  }
+  return out;
+}
+
+// Fade in (DayFlow's: from 10% over up to 8 seconds) and a short fade out, so a cut doesn't click.
+function shape(samples, rate, { fadeIn = false, fadeOut = 0 } = {}) {
+  const inN = Math.max(1, Math.round(Math.min(samples.length / rate, FADE_SECONDS) * rate));
+  const outN = Math.round(fadeOut * rate);
+  for (let i = 0; i < samples.length; i++) {
+    let g = 1;
+    if (fadeIn && i < inN) g *= 0.1 + 0.9 * (i / inN);
+    if (outN && i >= samples.length - outN) g *= (samples.length - i) / outN;
+    samples[i] *= g;
+  }
+  return samples;
+}
+
+// The quiet before you start and after you stop is cut off, with a little room either side.
+function trimSilence(samples, rate) {
+  let peak = 0;
+  for (const v of samples) peak = Math.max(peak, Math.abs(v));
+  const threshold = Math.max(0.01, peak * 0.08);
+  let first = samples.findIndex((v) => Math.abs(v) > threshold);
+  if (first < 0) return samples;
+  let last = samples.length - 1;
+  while (last > first && Math.abs(samples[last]) <= threshold) last--;
+  return samples.slice(Math.max(0, first - Math.round(0.05 * rate)), Math.min(samples.length, last + Math.round(0.25 * rate)));
+}
+
+// Record a clip ---------------------------------------------------------------------------
+
+const rec = { stream: null, node: null, source: null, chunks: [], rate: 48000, timer: null, startedAt: 0, samples: null, playing: null };
+const METER_BARS = 24;
+$('rec-meter').innerHTML = '<i></i>'.repeat(METER_BARS);
+
+function recState(phase, caption) {
+  rec.phase = phase;
+  $('rec-button').classList.toggle('recording', phase === 'recording');
+  $('rec-button').setAttribute('aria-label', phase === 'recording' ? 'Stop recording' : 'Record');
+  $('rec-button').hidden = phase === 'denied';
+  $('rec-after').hidden = phase !== 'recorded';
+  $('rec-save').disabled = phase !== 'recorded';
+  $('rec-caption').textContent = caption;
+}
+
+function nextRecordingName() {
+  const taken = new Set(state.customSounds.map((c) => c.name.toLowerCase()));
+  let n = 1;
+  while (taken.has(`recording ${n}`)) n++;
+  return `Recording ${n}`;
+}
+
+function openRecorder() {
+  $('rec-time').textContent = '0:00';
+  $('rec-error').textContent = '';
+  $('rec-name').value = nextRecordingName();
+  $('rec-keep').checked = false;
+  rec.samples = null;
+  recState('ready', 'Click to record. Recording stops by itself at 30 seconds.');
+  $('record-dialog').showModal();
+}
+
+async function startRecording() {
+  stopRecPlayback();
+  $('rec-error').textContent = '';
+  if (!(await dayflow.askMicrophone())) {
+    recState('denied', 'DayFlow needs the microphone to record. Allow it in System Settings → Privacy & Security → Microphone.');
+    $('rec-error').innerHTML = '<button class="btn small" id="rec-open-settings">Open System Settings</button>';
+    $('rec-open-settings').addEventListener('click', () => dayflow.openMicrophoneSettings());
+    return;
+  }
+  try {
+    rec.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (e) {
+    $('rec-error').textContent = `DayFlow couldn't use the microphone. (${e.message})`;
+    return;
+  }
+  const ac = ctx();
+  await ac.resume();
+  rec.rate = ac.sampleRate;
+  rec.chunks = [];
+  rec.source = ac.createMediaStreamSource(rec.stream);
+  rec.node = ac.createScriptProcessor(4096, 1, 1);
+  let level = 0;
+  rec.node.onaudioprocess = (e) => {
+    const d = e.inputBuffer.getChannelData(0);
+    rec.chunks.push(new Float32Array(d));
+    let sum = 0;
+    for (const v of d) sum += v * v;
+    level = Math.sqrt(sum / d.length);
+  };
+  rec.source.connect(rec.node);
+  rec.node.connect(ac.destination); // a ScriptProcessor only runs while connected (it outputs silence)
+  rec.startedAt = performance.now();
+  recState('recording', 'Recording… Click to stop.');
+  rec.timer = setInterval(() => {
+    const t = (performance.now() - rec.startedAt) / 1000;
+    $('rec-time').textContent = countdown(t * 1000);
+    const lit = Math.round(Math.min(1, Math.max(0, (20 * Math.log10(level + 1e-6) + 50) / 50)) * METER_BARS);
+    [...$('rec-meter').children].forEach((bar, i) => {
+      bar.classList.toggle('on', i < lit);
+      bar.classList.toggle('hot', i >= METER_BARS * 0.75);
+    });
+    if (t >= MAX_CLIP_SECONDS) stopRecording();
+  }, 100);
+}
+
+function stopRecording() {
+  clearInterval(rec.timer);
+  rec.node?.disconnect();
+  rec.source?.disconnect();
+  rec.stream?.getTracks().forEach((t) => t.stop());
+  rec.stream = null;
+  [...$('rec-meter').children].forEach((bar) => bar.classList.remove('on'));
+  const total = rec.chunks.reduce((n, c) => n + c.length, 0);
+  const samples = new Float32Array(Math.min(total, Math.round(MAX_CLIP_SECONDS * rec.rate)));
+  let at = 0;
+  for (const c of rec.chunks) { samples.set(c.subarray(0, samples.length - at), at); at += c.length; if (at >= samples.length) break; }
+  rec.chunks = [];
+  if (samples.length < rec.rate * 0.2) {
+    recState('ready', "Nothing was recorded. Check that your microphone isn't muted, then try again.");
+    return;
+  }
+  rec.samples = samples;
+  recState('recorded', 'The quiet start and end are trimmed off.');
+  showRecLength();
+}
+
+const recFinal = () => (rec.samples && !$('rec-keep').checked ? trimSilence(rec.samples, rec.rate) : rec.samples);
+function showRecLength() { $('rec-time').textContent = countdown(((recFinal()?.length || 0) / rec.rate) * 1000); }
+$('rec-keep').addEventListener('change', () => {
+  $('rec-caption').textContent = $('rec-keep').checked ? 'Kept as recorded.' : 'The quiet start and end are trimmed off.';
+  showRecLength();
+});
+
+function stopRecPlayback() { try { rec.playing?.stop(); } catch {} rec.playing = null; $('rec-play').textContent = '▶ Play'; }
+$('rec-play').addEventListener('click', () => {
+  if (rec.playing) { stopRecPlayback(); return; }
+  const data = recFinal();
+  const ac = ctx();
+  const buf = ac.createBuffer(1, data.length, rec.rate);
+  buf.copyToChannel(data, 0);
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  src.connect(ac.destination);
+  src.onended = () => { if (rec.playing === src) stopRecPlayback(); };
+  src.start();
+  rec.playing = src;
+  $('rec-play').textContent = '■ Stop';
+});
+$('rec-button').addEventListener('click', () => (rec.phase === 'recording' ? stopRecording() : startRecording()));
+$('rec-again').addEventListener('click', startRecording);
+$('rec-cancel').addEventListener('click', () => { if (rec.phase === 'recording') stopRecording(); stopRecPlayback(); $('record-dialog').close(); });
+$('record-dialog').addEventListener('cancel', () => { if (rec.phase === 'recording') stopRecording(); stopRecPlayback(); });
+$('rec-save').addEventListener('click', async () => {
+  const name = $('rec-name').value.trim();
+  if (!name) { $('rec-error').textContent = 'Give the recording a name.'; return; }
+  try {
+    stopRecPlayback();
+    const samples = shape(Float32Array.from(recFinal()), rec.rate, { fadeOut: 0.05 });
+    const { clip } = await dayflow.addSound({ name, ext: 'wav', data: encodeWav(samples, rec.rate) });
+    $('record-dialog').close();
+    await loadAll();
+    soundsStatus(`Added "${clip.name}". Choose it in any reminder's sound menu.`);
+  } catch (e) { $('rec-error').textContent = cleanError(e); }
+});
+
+// Choose 30 seconds ------------------------------------------------------------------------
+
+const piece = { buffer: null, name: '', source: null, playing: null, stopTimer: null };
+
+function openPiece({ name, buffer, source }) {
+  Object.assign(piece, { buffer, name, source });
+  const maxStart = Math.max(0, buffer.duration - MAX_CLIP_SECONDS);
+  $('piece-name').textContent = name;
+  $('piece-length').textContent = `${countdown(buffer.duration * 1000)} long`;
+  $('piece-start').max = String(maxStart);
+  $('piece-start').value = '0';
+  $('piece-start').disabled = maxStart === 0;
+  $('piece-fade').checked = false;
+  $('piece-error').textContent = '';
+  $('piece-note').textContent = source
+    ? `The piece is saved as "${name} (clip)". The full song moves to DayFlow Clips → Originals.`
+    : `The piece is saved as "${name} (clip)". Your original file isn't changed.`;
+  showPieceRange();
+  $('piece-dialog').showModal();
+}
+
+const pieceStart = () => Number($('piece-start').value);
+function showPieceRange() {
+  const s = pieceStart();
+  $('piece-range').textContent = `${countdown(s * 1000)} – ${countdown(Math.min(piece.buffer.duration, s + MAX_CLIP_SECONDS) * 1000)}`;
+}
+function stopPiece() { clearTimeout(piece.stopTimer); try { piece.playing?.stop(); } catch {} piece.playing = null; $('piece-play').textContent = '▶ Play'; }
+function playPiece() {
+  stopPiece();
+  const ac = ctx();
+  const src = ac.createBufferSource();
+  src.buffer = piece.buffer;
+  const gain = ac.createGain();
+  gain.gain.value = (Number($('set-volume').value) / 100) ** 2;
+  src.connect(gain).connect(ac.destination);
+  src.start(0, pieceStart(), MAX_CLIP_SECONDS);
+  src.onended = () => { if (piece.playing === src) stopPiece(); };
+  piece.playing = src;
+  $('piece-play').textContent = '■ Stop';
+}
+$('piece-start').addEventListener('input', showPieceRange);
+$('piece-start').addEventListener('change', () => { if (piece.playing) playPiece(); });
+$('piece-play').addEventListener('click', () => (piece.playing ? stopPiece() : playPiece()));
+$('piece-cancel').addEventListener('click', () => { stopPiece(); $('piece-dialog').close(); });
+$('piece-dialog').addEventListener('cancel', stopPiece);
+$('piece-save').addEventListener('click', async () => {
+  stopPiece();
+  try {
+    const rate = piece.buffer.sampleRate;
+    const from = Math.round(pieceStart() * rate);
+    const to = Math.min(piece.buffer.length, from + Math.round(MAX_CLIP_SECONDS * rate));
+    const samples = shape(mono(piece.buffer, from, to), rate, { fadeIn: $('piece-fade').checked, fadeOut: 0.6 });
+    const { clip } = await dayflow.savePiece({ name: piece.name, data: encodeWav(samples, rate), source: piece.source });
+    $('piece-dialog').close();
+    await loadAll();
+    soundsStatus(`Added "${clip.name}".${piece.source ? ' The full song is in DayFlow Clips → Originals.' : ''} Choose it in any reminder's sound menu.`);
+  } catch (e) { $('piece-error').textContent = cleanError(e); }
+});
 
 // ---------------------------------------------------------------------------
 // Reminder rows

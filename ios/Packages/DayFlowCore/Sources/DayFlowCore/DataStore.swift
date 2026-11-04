@@ -6,12 +6,15 @@ import CryptoKit
 ///     <dir>/schedule.json      { "blocks": [...] }
 ///     <dir>/block-types.json   [ { id, name, reminders } ]
 ///     <dir>/settings.json      the iPhone's settings
-///     <dir>/sounds.json        [ { id, name, ext } ]
-///     <dir>/sounds/<id>.<ext>  your clips
+///     <dir>/sounds.json        [ { id, name, ext, file } ]
+///     <clips>/<name>.<ext>     your clips, in a folder you can see (On My iPhone › DayFlow › Clips)
+///     <clips>/Originals/       long songs you took a 30-second piece from
 ///     <backups>/schedule-YYYY-MM-DD-HHMMSS-mmm.json   the newest ten
 public final class DataStore {
     public let dir: URL
     public let backupsDir: URL
+    /// The Clips folder. Files you put here become clips (see ClipFolder.swift).
+    public let clipsDir: URL
     public internal(set) var blocks: [Block] = []
     public internal(set) var types: [BlockType] = []
     public internal(set) var settings = Settings()
@@ -25,11 +28,13 @@ public final class DataStore {
     var typesFile: URL { dir.appendingPathComponent("block-types.json") }
     var settingsFile: URL { dir.appendingPathComponent("settings.json") }
     var clipsFile: URL { dir.appendingPathComponent("sounds.json") }
-    public var clipsDir: URL { dir.appendingPathComponent("sounds", isDirectory: true) }
+    /// Where clips were kept before the Clips folder, as sounds/<id>.<ext>.
+    var legacyClipsDir: URL { dir.appendingPathComponent("sounds", isDirectory: true) }
 
-    public init(dir: URL, backupsDir: URL) {
+    public init(dir: URL, backupsDir: URL, clipsDir: URL? = nil) {
         self.dir = dir
         self.backupsDir = backupsDir
+        self.clipsDir = clipsDir ?? dir.appendingPathComponent("Clips", isDirectory: true)
         load()
     }
 
@@ -39,8 +44,9 @@ public final class DataStore {
     public func load() {
         clips = (read(clipsFile)?.array ?? []).compactMap { c in
             guard let id = c["id"]?.stringValue, let name = c["name"]?.stringValue, let ext = c["ext"]?.stringValue else { return nil }
-            return CustomClip(id: id, name: name, ext: ext)
+            return CustomClip(id: id, name: name, ext: ext, file: c["file"]?.string)
         }
+        moveLegacyClips()
         types = (try? Sanitize.types(read(typesFile) ?? JSONValue.from(Specs.starterTypes()), isSound: isSound)) ?? Specs.starterTypes()
         settings = Sanitize.settings(read(settingsFile), isSound: isSound)
         let raw = read(scheduleFile)?["blocks"] ?? JSONValue.from(Specs.sampleSchedule())
@@ -96,21 +102,19 @@ public final class DataStore {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined().prefix(16).description
     }
 
-    /// Copies a clip in. The same audio is only ever stored once; a different clip whose name
-    /// is taken becomes "Name (2)".
+    /// Copies a clip into the Clips folder. The same audio is only ever stored once; a
+    /// different clip whose name is taken becomes "Name (2)", and so does its file.
     @discardableResult
     public func installClip(name: String, ext: String?, data: Data) throws -> CustomClip {
         let type = try Sanitize.clipType(name: name, ext: ext, bytes: data.count)
         let id = Self.clipHash(data)
         if let existing = clips.first(where: { $0.id == id }) { return existing }
         let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
-        let base = trimmed.isEmpty ? "Sound clip" : trimmed
-        var label = base
-        var n = 2
-        while clips.contains(where: { $0.name == label }) { label = "\(base) (\(n))"; n += 1 }
-        let clip = CustomClip(id: id, name: label, ext: type)
+        let label = uniqueClipName(trimmed.isEmpty ? "Sound clip" : trimmed)
         try FileManager.default.createDirectory(at: clipsDir, withIntermediateDirectories: true)
-        try data.write(to: clipURL(clip), options: .atomic)
+        let file = uniqueFileName(Self.safeFileName(label), ext: type)
+        try data.write(to: clipsDir.appendingPathComponent(file), options: .atomic)
+        let clip = CustomClip(id: id, name: label, ext: type, file: file)
         clips.append(clip)
         try write(clipsFile, clips)
         return clip
@@ -118,10 +122,12 @@ public final class DataStore {
 
     /// Deletes a clip; any reminder that used it goes back to that reminder's starting sound.
     /// Returns the names of the reminders that changed, e.g. "Focus · Heads-up".
+    /// With `deleteFile` off, the file is left alone (it's already gone, or the app moves it to
+    /// the Trash itself).
     @discardableResult
-    public func removeClip(_ id: String) throws -> [String] {
+    public func removeClip(_ id: String, deleteFile: Bool = true) throws -> [String] {
         guard let clip = clips.first(where: { $0.id == id }) else { return [] }
-        try? FileManager.default.removeItem(at: clipURL(clip))
+        if deleteFile { try? FileManager.default.removeItem(at: clipURL(clip)) }
         clips.removeAll { $0.id == id }
         try write(clipsFile, clips)
         var reset: [String] = []

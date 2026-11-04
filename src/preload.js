@@ -1,5 +1,5 @@
 // Exposes a small, explicit API to the windows. No Node access in the renderer.
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('dayflow', {
   platform: process.platform,
@@ -22,6 +22,27 @@ contextBridge.exposeInMainWorld('dayflow', {
   pickSoundFile: () => ipcRenderer.invoke('pick-sound-file'),
   addSound: (clip) => ipcRenderer.invoke('add-sound', clip),
   removeSound: (id) => ipcRenderer.invoke('remove-sound', id),
+  readSoundFile: (file) => ipcRenderer.invoke('read-sound-file', file),
+  readFolderFile: (name) => ipcRenderer.invoke('read-folder-file', name),
+  savePiece: (piece) => ipcRenderer.invoke('save-piece', piece),
+  renameSound: (id, name) => ipcRenderer.invoke('rename-sound', { id, name }),
+  revealSound: (id) => ipcRenderer.invoke('reveal-sound', id),
+  trashFolderFile: (name) => ipcRenderer.invoke('trash-folder-file', name),
+  openClipsFolder: () => ipcRenderer.invoke('open-clips-folder'),
+  scanClips: () => ipcRenderer.invoke('scan-clips'),
+  addClipMenu: () => ipcRenderer.invoke('add-clip-menu'),
+  clipMenu: () => ipcRenderer.invoke('clip-menu'),
+  askMicrophone: () => ipcRenderer.invoke('ask-microphone'),
+  openMicrophoneSettings: () => ipcRenderer.invoke('open-microphone-settings'),
+  // The path of a file dropped on the window, so the main process can read it.
+  pathForFile: (file) => webUtils.getPathForFile(file),
+  // The main process asks how long a clip plays; fn(data) resolves to seconds or throws.
+  onInspectClip: (fn) => ipcRenderer.on('inspect-clip', async (_e, { token, data }) => {
+    try { ipcRenderer.send('inspect-clip-result', { token, seconds: await fn(data) }); } catch (e) {
+      ipcRenderer.send('inspect-clip-result', { token, error: String(e?.message || e) });
+    }
+  }),
+  onToast: (fn) => ipcRenderer.on('toast', (_e, msg) => fn(msg)),
   saveBlockTypes: (types) => ipcRenderer.invoke('save-block-types', types),
 
   // Export and import

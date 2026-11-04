@@ -276,13 +276,31 @@ Pick sounds per reminder in [Block types](#5-block-types-and-their-reminders) an
 
 ### Adding your own sounds
 
-Click **Add a sound clip…** and choose a file.
+Your own sounds are **clips**, kept as ordinary files in the **Clips folder**: **Music → DayFlow Clips**. **Open Clips Folder** in Settings → Sounds shows it in Finder.
+
+**Add a Clip ▾** offers three choices:
+
+| Choice | What it does |
+|---|---|
+| **Record a clip…** | Records with your Mac's microphone (macOS asks once). Click the red button to start and again to stop; it stops by itself at 30 seconds. Listen with **▶ Play**, or **Record again**. The quiet before you start and after you stop is trimmed off; turn on **Keep the silence** to keep it as recorded. Name it ("Recording 1" to start with) and **Save**. |
+| **Choose a file…** | Picks a sound file; DayFlow copies it into the Clips folder. |
+| **How do I add music?** | A short help page with all the ways to add sounds. |
+
+You can also **drag sound files** from Finder onto Your clips, or **put them straight into the Clips folder**: they show up in Your clips as soon as they land there.
 
 - **Formats:** mp3, wav, m4a, aac or ogg.
-- **Limits:** up to 5 MB and 30 seconds. DayFlow tells you if a file is too big, too long, or can't be played.
-- DayFlow **copies** the clip into its own data folder, so moving or deleting your original doesn't matter.
-- Your clips appear under **Your clips** in every sound menu, and in the list in Settings → Sounds. **▶** plays one, and **Remove** deletes it. Any reminder that used a removed clip goes back to its starting sound.
-- Adding the same audio twice keeps one copy. A different clip with a name you already have is renamed, for example *Gong (2)*.
+- **Long files:** a clip plays for up to 30 seconds. For a longer file (a song, say, up to 200 MB), DayFlow opens **Choose 30 seconds**: drag the slider to where the piece should start, **▶ Play** to hear it, turn on **Fade in** if you like, then **Save**. The piece is saved as *Name (clip)*. If the song was in the Clips folder, it moves into **DayFlow Clips → Originals**, which DayFlow doesn't list, so nothing of yours is deleted. A long file you put in the folder waits in Your clips, marked *Too long*, until you choose its 30 seconds.
+- **Files DayFlow can't use** (a text file, a damaged file, a copy of a clip you already have) are listed with the reason, and **Move to Trash** clears them away.
+- **Songs from the Music app or Apple Music can't be used.** They're protected, so no other app can play them; you need an actual audio file.
+- Recordings and pieces are saved as wav files, which play on both the Mac and the iPhone.
+
+Each clip in Your clips has **▶** to play it and **⋯** with:
+
+- **Rename…** renames the clip and its file. Reminders that use it keep it. Renaming the file in Finder renames the clip too.
+- **Show in Finder** shows its file.
+- **Remove** moves its file to the Trash. Any reminder that used it goes back to its starting sound. Deleting the file in Finder does the same.
+
+Clips appear under **Your clips** in every sound menu. Adding the same audio twice keeps one copy, and a different clip with a name you already have is renamed, for example *Gong (2)*.
 
 ---
 
@@ -434,7 +452,7 @@ DayFlow keeps everything in `~/Library/Application Support/Dayflow` on your Mac.
 | `schedule.json` | Your blocks |
 | `block-types.json` | Your block types and their reminders |
 | `settings.json` | Meetings reminders, volume, and other preferences |
-| `sounds.json` and `sounds/` | The sound clips you added |
+| `sounds.json` | The list of your sound clips (the clips themselves are in **Music → DayFlow Clips**) |
 | `backups/` | Backups taken before each import or upgrade |
 | `window-state.json` | Your last mode and where the mini timer sits |
 | `google-credentials.json` | The Google client file you imported |
@@ -442,7 +460,9 @@ DayFlow keeps everything in `~/Library/Application Support/Dayflow` on your Mac.
 
 **Upgrading DayFlow** keeps your data. If a new version changes how something is stored, DayFlow first saves your old setup to `backups/`, then converts it, so nothing you hear or see changes unexpectedly.
 
-**To uninstall**, quit DayFlow, drag it from Applications to the Trash, and delete the folder above if you also want to remove your data.
+**Your clips** are in **Music → DayFlow Clips**, outside that folder, so you can manage them in Finder. Clips from earlier versions (in `sounds/`) move there by themselves the first time this version opens.
+
+**To uninstall**, quit DayFlow, drag it from Applications to the Trash, and delete the folder above, and **Music → DayFlow Clips**, if you also want to remove your data.
 
 ---
 
@@ -485,6 +505,7 @@ Only one copy of DayFlow runs at a time; opening it again brings the running cop
 | Plan your week | **Schedule**, then **Save schedule** |
 | Change a block's reminders | Change its **type** in Schedule, or edit the type in **Settings → Block types** |
 | Hear a sound | Pick it in a sound menu, or click **▶** |
+| Add your own sound | **Settings → Sounds → Add a Clip ▾** (record, choose a file), drag files onto Your clips, or put them in **Music → DayFlow Clips** |
 | Make a sound gentler | Press **Fade in** next to it |
 | Snooze a reminder | **Snooze ▾** on its card |
 | Silence cards for a while | Menu bar icon → **Pause reminder cards for 1 hour** |
@@ -572,7 +593,16 @@ The 18 built-in sounds are the same as the Mac's.
 - iOS plays a reminder's sound at your **ringer volume**. DayFlow's **Volume** (Settings → Sounds) sets how loud DayFlow is within that, so it can make sounds quieter than the ringer but never louder.
 - **Fade in** works as on the Mac: the sound starts at 10% and grows to your volume over its first 8 seconds. DayFlow builds the fade and volume into its own copy of each sound, so they work even while the app is closed.
 - Choosing a sound plays it, and **Play** plays it again. **Previews play even when the iPhone is on silent**, because you tapped them; reminders still follow the switch.
-- **Add a clip…** (Settings → Sounds) adds your own sound from Files: mp3, wav, m4a, aac or ogg, up to 5 MB and 30 seconds. iOS may not be able to play some files (OGG in particular). DayFlow checks each clip and tells you if it can't use it.
+
+**Your own sounds** work as on the Mac, with the Clips folder in the Files app: **On My iPhone → DayFlow → Clips**. In Settings → Sounds, **Add a clip** offers:
+
+- **Record a clip…**: records with the iPhone's microphone (iOS asks once). Tap the red button to start and again to stop; it stops by itself at 30 seconds. The quiet start and end are trimmed off unless you turn on **Keep the silence**. Play it, name it and **Save**.
+- **Choose a file…**: picks a sound from Files or iCloud Drive and copies it into the Clips folder.
+- **How do I add music?**: the help page.
+
+Other ways in: **AirDrop** a sound file to your iPhone and choose DayFlow; tap **Share** on a sound in Files, Mail or Voice Memos and choose DayFlow; or put files in the Clips folder in the Files app. DayFlow checks the folder whenever it opens and when you open Sounds.
+
+A file longer than 30 seconds opens **Choose 30 seconds**, as on the Mac; a song from the Clips folder then moves into **Clips → Originals**. Recordings and pieces are saved as m4a files. In Your clips, tap a clip to hear it, and touch and hold (or swipe left) to **Rename** or **Remove** it. Remove deletes its file, after asking. iOS may not be able to play some files (OGG in particular); DayFlow says so.
 
 ### Meetings on iPhone
 
@@ -603,7 +633,7 @@ The file's Default type matches your Default, other types match by name, and cli
 
 Before every import, DayFlow keeps a backup, the newest 10. Find them in **Schedule → ⋯ → Backups**: tap one to see what restoring it would change, or share it to send it to your Mac. They're also in the **Files** app, under **On My iPhone → DayFlow → Backups**.
 
-Your schedule, types, settings and clips live in DayFlow's own storage on the iPhone, in the same file formats as the Mac's. Deleting the app deletes them, so export first if you want to keep your plan.
+Your clips are in **On My iPhone → DayFlow → Clips**. Your schedule, types and settings live in DayFlow's own storage on the iPhone, in the same file formats as the Mac's. Deleting the app deletes all of it, Clips folder included, so export first if you want to keep your plan.
 
 ### iPhone troubleshooting
 
