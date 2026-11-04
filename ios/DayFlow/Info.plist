@@ -24,6 +24,23 @@
 				<string>public.json</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Sound clip</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.audio</string>
+				<string>public.mp3</string>
+				<string>com.microsoft.waveform-audio</string>
+				<string>public.mpeg-4-audio</string>
+				<string>public.aac-audio</string>
+				<string>org.xiph.ogg-audio</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
@@ -53,11 +70,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<false/>
+	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>DayFlow reads the calendars you choose so it can remind you before meetings start.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>DayFlow reads the calendars you choose so it can remind you before meetings start.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>DayFlow uses the microphone only when you record a clip.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

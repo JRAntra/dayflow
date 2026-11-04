@@ -96,16 +96,21 @@ public struct BlockType: Codable, Hashable, Identifiable, Sendable {
     public var isDefault: Bool { id == Specs.defaultType }
 }
 
-/// One of your own sound clips, stored as sounds/<id>.<ext>. The id is a hash of the audio.
+/// One of your own sound clips. The id is a hash of the audio, so reminders and export files
+/// keep finding it whatever the file is called; `file` is its file in the Clips folder, e.g.
+/// "Ding.mp3". (Clips saved before the Clips folder existed have no `file` and are moved in.)
 public struct CustomClip: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var name: String
     public var ext: String
+    public var file: String?
 
-    public init(id: String, name: String, ext: String) { self.id = id; self.name = name; self.ext = ext }
+    public init(id: String, name: String, ext: String, file: String? = nil) {
+        self.id = id; self.name = name; self.ext = ext; self.file = file
+    }
 
     public var soundId: String { "custom:\(id)" }
-    public var fileName: String { "\(id).\(ext)" }
+    public var fileName: String { file ?? "\(id).\(ext)" }
 }
 
 /// The iPhone's settings. `sound`, `volume` and `meetings` mean the same as on the Mac;

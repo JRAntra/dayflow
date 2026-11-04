@@ -12,9 +12,7 @@ final class TourTests: XCTestCase {
     }
 
     func testSettingsPages() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTestReset", "-uiTestOnboarded"]
-        app.launch()
+        let app = XCUIApplication.launchFresh(["-uiTestReset", "-uiTestOnboarded"])
         app.buttons["Settings"].tap()
         row(app, "Block types").tap()
         XCTAssertTrue(app.staticTexts["Focus"].waitForExistence(timeout: 5))
@@ -47,9 +45,7 @@ final class TourTests: XCTestCase {
     /// New type… from the edit sheet opens the new type's reminders inside the sheet, and its
     /// sound picker works there too; the block then uses the new type.
     func testNewTypeFromTheEditSheet() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTestReset", "-uiTestOnboarded"]
-        app.launch()
+        let app = XCUIApplication.launchFresh(["-uiTestReset", "-uiTestOnboarded"])
         app.buttons["Schedule"].tap()
         app.buttons["List"].tap()
         app.buttons["Add block"].tap()

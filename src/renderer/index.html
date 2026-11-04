@@ -135,14 +135,19 @@
           <label class="row"><span>Play a sound with each reminder</span><input id="set-sound" type="checkbox" class="switch"></label>
           <label class="row"><span>Volume</span><span class="range"><input id="set-volume" type="range" min="0" max="100" step="5"><span id="volume-val" class="muted"></span></span></label>
         </div>
-        <p class="group-title">Your sound clips</p>
-        <div class="group">
+        <p class="group-title">Your clips</p>
+        <div class="group drop-zone" id="clip-group">
           <ul id="clip-list" class="clip-list"></ul>
-          <div class="row"><span id="clip-empty" class="muted">No clips yet. Add one and pick it for any reminder.</span></div>
+          <ul id="folder-list" class="clip-list folder-list"></ul>
+          <div class="row" id="clip-empty-row"><span id="clip-empty" class="muted">No clips yet. Record one, choose a file, or drop sound files here.</span></div>
+          <div class="drop-hint" aria-hidden="true">Drop to add to Your clips</div>
         </div>
         <div class="row pane-foot">
-          <span class="muted">mp3, wav, m4a, aac or ogg, up to 5 MB and 30 seconds.</span>
-          <button id="add-clip" class="btn">Add a sound clip…</button>
+          <span class="muted">Your clips are in <span id="clips-folder-name">Music › DayFlow Clips</span>. Drop sound files here or into that folder.</span>
+          <span class="row-actions">
+            <button id="open-clips" class="btn">Open Clips Folder</button>
+            <button id="add-clip" class="btn primary" aria-haspopup="menu">Add a Clip ▾</button>
+          </span>
         </div>
         <p class="status" role="status"></p>
       </div>
@@ -204,6 +209,75 @@
     <div class="sheet-actions">
       <button id="imp-cancel" class="btn">Cancel</button>
       <button id="imp-apply" class="btn primary">Replace schedule</button>
+    </div>
+  </dialog>
+
+  <dialog id="record-dialog" class="sheet clip-sheet" aria-labelledby="rec-title">
+    <h2 id="rec-title">Record a clip</h2>
+    <div class="rec-time" id="rec-time">0:00</div>
+    <p class="muted rec-caption" id="rec-caption">Click to record. Recording stops by itself at 30 seconds.</p>
+    <div class="rec-meter" id="rec-meter" aria-hidden="true"></div>
+    <button id="rec-button" class="rec-button" aria-label="Record"><span></span></button>
+    <div id="rec-after" class="rec-after" hidden>
+      <div class="rec-actions">
+        <button id="rec-play" class="btn">▶ Play</button>
+        <button id="rec-again" class="btn">Record again</button>
+      </div>
+      <label class="row"><span>Name</span><input id="rec-name" type="text"></label>
+      <label class="row"><span>Keep the silence</span><input id="rec-keep" type="checkbox" class="switch"></label>
+    </div>
+    <p id="rec-error" class="error" role="alert"></p>
+    <div class="sheet-actions">
+      <button id="rec-cancel" class="btn">Cancel</button>
+      <button id="rec-save" class="btn primary" disabled>Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="piece-dialog" class="sheet clip-sheet" aria-labelledby="piece-title">
+    <h2 id="piece-title">Choose 30 seconds</h2>
+    <p><strong id="piece-name"></strong> <span class="muted" id="piece-length"></span></p>
+    <p class="muted">Clips play for up to 30 seconds. Choose which 30 seconds to use.</p>
+    <div class="piece-row">
+      <strong id="piece-range" class="piece-range">0:00 – 0:30</strong>
+      <button id="piece-play" class="btn">▶ Play</button>
+    </div>
+    <input id="piece-start" type="range" min="0" max="0" step="0.5" value="0" aria-label="Start of the piece">
+    <label class="row"><span>Fade in<span class="muted sub-line">Starts quiet and grows to full volume</span></span><input id="piece-fade" type="checkbox" class="switch"></label>
+    <p class="muted" id="piece-note"></p>
+    <p id="piece-error" class="error" role="alert"></p>
+    <div class="sheet-actions">
+      <button id="piece-cancel" class="btn">Cancel</button>
+      <button id="piece-save" class="btn primary">Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="clip-help" class="sheet clip-sheet" aria-labelledby="help-title">
+    <h2 id="help-title">How do I add music?</h2>
+    <button id="help-open-folder" class="btn">Open Clips Folder</button>
+    <h3>Add your own sounds</h3>
+    <ul class="help-list">
+      <li><strong>Record one:</strong> Add a Clip → Record a clip.</li>
+      <li><strong>Choose a file:</strong> Add a Clip → Choose a file.</li>
+      <li><strong>Drag files</strong> from Finder onto Your clips.</li>
+      <li><strong>The Clips folder:</strong> Music → DayFlow Clips. Anything you put there shows up in Your clips straight away; rename or delete a file there and its clip changes too.</li>
+      <li><strong>QuickTime Player:</strong> File → New Audio Recording, then save the recording into the Clips folder.</li>
+      <li><strong>Voice Memos:</strong> drag a memo out to the Finder (or onto Your clips).</li>
+    </ul>
+    <h3>What works</h3>
+    <p>mp3, wav, m4a, aac or ogg files. Clips play for up to 30 seconds; for a longer song, you choose which 30 seconds to use, and the full song moves to DayFlow Clips → Originals.</p>
+    <h3>What doesn't</h3>
+    <p>Songs from the Music app or Apple Music. They're protected, so no other app can play them. You need an actual audio file.</p>
+    <div class="sheet-actions"><button id="help-done" class="btn primary">Done</button></div>
+  </dialog>
+
+  <dialog id="rename-dialog" class="sheet clip-sheet small-sheet" aria-labelledby="rename-title">
+    <h2 id="rename-title">Rename clip</h2>
+    <p class="muted">The file in the Clips folder is renamed too. Reminders that use this clip keep it.</p>
+    <input id="rename-input" type="text" aria-label="Name">
+    <p id="rename-error" class="error" role="alert"></p>
+    <div class="sheet-actions">
+      <button id="rename-cancel" class="btn">Cancel</button>
+      <button id="rename-save" class="btn primary">Rename</button>
     </div>
   </dialog>
 

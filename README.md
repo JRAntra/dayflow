@@ -82,7 +82,7 @@ Blocks can repeat on any days of the week.
 
 Every reminder picks from 18 built-in sounds (bells, chimes, a class bell, door and announcement tones, an alarm clock and a rooster, each 4 to 9 seconds) or your own clips. Picking a sound plays it straight away, and ▶ next to it plays it again. **Settings → Sounds** has one volume slider and a switch to mute everything.
 
-**Add a sound clip…** accepts mp3, wav, m4a, aac or ogg, up to 5 MB and 30 seconds. DayFlow copies the clip into its data folder, so moving or deleting the original doesn't matter. Removing a clip puts any reminder that used it back on that reminder's starting sound.
+Your own clips are ordinary files in the **Clips folder**, `~/Music/DayFlow Clips` (**Open Clips Folder** in Settings → Sounds). **Add a Clip ▾** can **Record a clip…** with the microphone (up to 30 seconds, with the quiet start and end trimmed off), **Choose a file…**, or explain **How do I add music?**. You can also drag sound files onto Your clips, or drop them into the folder, which DayFlow watches. Files can be mp3, wav, m4a, aac or ogg. A file longer than 30 seconds (or over 5 MB, up to 200 MB) opens **Choose 30 seconds**, which saves a piece as *Name (clip)* and moves a song from the folder into `Originals`. Renaming or deleting a file in Finder renames or removes its clip; **⋯ → Rename…** and **Remove** (to the Trash) do the same from DayFlow. A removed clip puts any reminder that used it back on that reminder's starting sound. Songs from the Music app or Apple Music are protected and can't be used.
 
 **Fade in**, next to each reminder's sound, makes it start quiet and grow to your volume so it doesn't startle you: the sound rises from 10% to full over its first 8 seconds (the whole of a built-in sound). ▶ previews it the same way.
 
@@ -138,7 +138,7 @@ In your OS's app-data folder (`~/Library/Application Support/Dayflow` on macOS, 
 - `schedule.json`: your blocks
 - `settings.json`: Meetings reminders, volume, and other preferences
 - `block-types.json`: your block types and their reminders
-- `sounds.json` and `sounds/`: the sound clips you added
+- `sounds.json`: the list of your sound clips; the clips themselves are files in `~/Music/DayFlow Clips` (inside the data folder instead when you run with `--user-data-dir`). Clips from earlier versions, in `sounds/`, move there on first launch.
 - `backups/`: your schedule, types and settings as they were before each import (and before upgrading)
 - `window-state.json`: last mode and where the mini timer sits
 - `google-credentials.json`: the OAuth client file you imported

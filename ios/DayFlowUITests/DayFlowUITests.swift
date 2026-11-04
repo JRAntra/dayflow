@@ -10,10 +10,7 @@ final class DayFlowUITests: XCTestCase {
     }
 
     func launch(onboarded: Bool) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTestReset"] + (onboarded ? ["-uiTestOnboarded"] : [])
-        app.launch()
-        return app
+        XCUIApplication.launchFresh(["-uiTestReset"] + (onboarded ? ["-uiTestOnboarded"] : []))
     }
 
     /// Taps a button on a system alert (the notification prompt) if one shows up.

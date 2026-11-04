@@ -19,7 +19,7 @@ If your Apple ID can't sign the App Groups capability, remove the `com.apple.sec
 ## Tests
 
 - `swift test` in `Packages/DayFlowCore` runs the core tests on the Mac, no Simulator needed: the planner's wording and merge rules against the Mac's, the rolling window, editing rules, cleaning, import and export (including a Mac export and version 1 files), backups and clips.
-- **Product → Test** in Xcode (or `xcodebuild test -scheme DayFlow -destination 'platform=iOS Simulator,name=iPhone 17'`) runs the UI tests in the Simulator: the welcome screens and notification prompt, scheduling, the test notification, the edit sheet's checks with Undo, the day view's tap, drag, resize and "This day only", the Live Activity, meetings from the calendar, and every Settings page.
+- **Product → Test** in Xcode (or `xcodebuild test -scheme DayFlow -destination 'platform=iOS Simulator,name=iPhone 17'`) runs the UI tests in the Simulator: the welcome screens and notification prompt, scheduling, the test notification, the edit sheet's checks with Undo, the day view's tap, drag, resize and "This day only", the Live Activity, meetings from the calendar, every Settings page, and your own clips (the Clips folder, Choose 30 seconds, the recorder, Rename and Remove). Each test relaunches DayFlow if the Simulator hands it a copy already running without the test's launch options.
 
 ## How it's put together
 
@@ -32,6 +32,7 @@ Packages/DayFlowCore/             the parts that don't need iOS, tested with `sw
   Planner.swift                   reminders for a day (wording and merge rules), the rolling window
   ScheduleEdits.swift             checks, ＋ rules, moving and resizing, "This day only", day-view columns
   DataStore.swift, Import.swift   files, clips, backups, export and import
+  ClipFolder.swift                the Clips folder: scanning, renames, long files, Originals
 DayFlow/                          the app
   AppModel.swift                  state for every screen; refreshes reminders after each change
   DayFlowApp.swift                notification taps and actions, background refresh, opened files
@@ -40,6 +41,8 @@ DayFlow/                          the app
   Services/LiveActivityController.swift  the Live Activity and the widgets' data
   Sound/SoundLibrary.swift        writes each sound as CAF with your volume and Fade in built in
   Sound/SoundPlayer.swift         previews (they play on silent)
+  Sound/AudioEdit.swift           trimming silence, 30-second pieces, writing m4a
+  Views/Settings/ClipSheets.swift the recorder and Choose 30 seconds
   Views/                          Today (dial, timeline), Schedule (list, day grid, edit sheet,
                                   import, backups), Settings, Welcome
 DayFlowWidgets/                   Live Activity (Lock Screen, Dynamic Island) and widgets
