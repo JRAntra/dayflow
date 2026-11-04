@@ -19,10 +19,29 @@ const OUTPUTS = [
 ];
 const ICNS_SIZES = [16, 32, 64, 128, 256, 512, 1024];
 
+// The iPhone icon: the same artwork, full-bleed (iOS rounds the corners itself), in the three
+// looks iOS 18 offers: light, dark and tinted (a grayscale image the system colours).
+const IOS_ICONS = path.join(__dirname, '..', 'ios', 'DayFlow', 'Assets.xcassets', 'AppIcon.appiconset');
+function iosIcon(svg, look) {
+  const scale = 1024 / 824;
+  let out = svg
+    .replace(/<rect x="101\.5"[^>]*\/>/, '') // the macOS tile's rim
+    .replace('<g clip-path="url(#tile)">', `<g transform="scale(${scale}) translate(-100 -100)">`);
+  if (look === 'dark') {
+    out = out.replace('stop-color="#4C9C9C"', 'stop-color="#24504F"')
+      .replace('stop-color="#2F6F73"', 'stop-color="#173B3E"')
+      .replace('stop-color="#173A3E"', 'stop-color="#0B1C1E"');
+  }
+  if (look === 'tinted') {
+    out = out.replace('</svg>', '').replace(/(<svg[^>]*>)/, '$1<filter id="gray"><feColorMatrix type="saturate" values="0"/></filter><g filter="url(#gray)">') + '</g></svg>';
+  }
+  return out;
+}
+
 // One offscreen window draws every size; each SVG is laid out at its target size and cropped,
 // so small icons are drawn sharp at that size instead of being shrunk from a big one.
 let win;
-async function render(svgFile, size) {
+async function render(svgFile, size, transform = (svg) => svg) {
   if (!win) {
     win = new BrowserWindow({
       width: 1024,
@@ -35,7 +54,7 @@ async function render(svgFile, size) {
       webPreferences: { offscreen: true },
     });
   }
-  const svg = fs.readFileSync(path.join(ASSETS, svgFile), 'utf8');
+  const svg = transform(fs.readFileSync(path.join(ASSETS, svgFile), 'utf8'));
   const html = `<!doctype html><style>html,body{margin:0;background:transparent;overflow:hidden}
     svg{display:block;width:${size}px;height:${size}px}</style>${svg}`;
   const file = path.join(os.tmpdir(), 'dayflow-icon.html');
@@ -51,6 +70,12 @@ app.whenReady().then(async () => {
   for (const [src, out, size] of OUTPUTS) {
     fs.writeFileSync(path.join(ASSETS, out), (await render(src, size)).toPNG());
     console.log(`assets/${out} (${size}px)`);
+  }
+
+  fs.mkdirSync(IOS_ICONS, { recursive: true });
+  for (const look of ['light', 'dark', 'tinted']) {
+    fs.writeFileSync(path.join(IOS_ICONS, `icon-${look}.png`), (await render('icon.svg', 1024, (svg) => iosIcon(svg, look))).toPNG());
+    console.log(`ios/.../AppIcon.appiconset/icon-${look}.png`);
   }
 
   // macOS wants an .icns holding every size; iconutil (part of macOS) builds it from an .iconset.

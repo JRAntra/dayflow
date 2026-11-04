@@ -2,3 +2,9 @@ node_modules/
 dist/
 .dev/
 .DS_Store
+# iOS: the Xcode project is generated from ios/project.yml by XcodeGen
+ios/DayFlow.xcodeproj/
+ios/build/
+ios/Packages/DayFlowCore/.build/
+ios/Packages/DayFlowCore/.swiftpm/
+xcuserdata/
