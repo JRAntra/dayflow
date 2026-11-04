@@ -399,6 +399,8 @@ const DEFAULT_SETTINGS = {
   shortcut: true,        // Control+Alt+D cycles the window modes
   cards: true,           // show a reminder card as well as the macOS notification
   cardAutoClose: 0,      // minutes before a card closes itself; 0 = stays until you act
+  offUntil: null,        // reminders are off until this moment (ms), for 1 or 24 hours
+  remindersOff: false,   // reminders are off until you turn them on
 };
 
 function sanitizeSettings(next, prev) {
@@ -410,6 +412,8 @@ function sanitizeSettings(next, prev) {
     shortcut: flag(next.shortcut, prev.shortcut),
     cards: flag(next.cards, prev.cards),
     cardAutoClose: [0, 1, 5].includes(Number(next.cardAutoClose)) ? Number(next.cardAutoClose) : prev.cardAutoClose,
+    offUntil: next.offUntil === null ? null : (Number.isFinite(Number(next.offUntil)) && next.offUntil !== undefined ? Number(next.offUntil) : (prev.offUntil ?? null)),
+    remindersOff: flag(next.remindersOff, prev.remindersOff ?? false),
   };
 }
 
@@ -833,9 +837,57 @@ const CARD_MARGIN = 14;
 const MAX_CARDS = 3;
 const SNOOZE_CHOICES = [1, 5, 10]; // minutes
 let cards = []; // newest first: { id, win, data, ev, notification, timer }
-let cardsPausedUntil = 0;
 
-const cardsPaused = () => Date.now() < cardsPausedUntil;
+// ---------------------------------------------------------------------------
+// Turning reminders off: For 1 hour, For 24 hours, or Until I turn them on. While off, nothing
+// rings: no notifications, no sounds, no cards. Reminders that fall in that time are skipped,
+// not delivered late. Kept in settings, so it lasts through a restart. Same as the iPhone app.
+// ---------------------------------------------------------------------------
+
+const TURN_OFF = {
+  hour: { label: 'For 1 hour', ms: 60 * 60 * 1000 },
+  day: { label: 'For 24 hours', ms: 24 * 60 * 60 * 1000 },
+  untilOn: { label: 'Until I turn them on' },
+};
+
+// When reminders come back: Infinity until you turn them on, null while they're on.
+function offUntil(now = Date.now()) {
+  if (settings.remindersOff) return Infinity;
+  return settings.offUntil && now < settings.offUntil ? settings.offUntil : null;
+}
+const remindersOff = () => offUntil() !== null;
+
+// "Reminders off until 3:15 PM", "…until Thu 3:15 PM", "…until you turn them on".
+function offStatus(now = new Date()) {
+  const until = offUntil(+now);
+  if (until === null) return null;
+  if (until === Infinity) return 'Reminders off until you turn them on';
+  const d = new Date(until);
+  const sameDay = dayKey(d) === dayKey(now);
+  return `Reminders off until ${sameDay ? '' : `${d.toLocaleDateString([], { weekday: 'short' })} `}${fmt(d)}`;
+}
+
+function turnOff(choice) {
+  const c = TURN_OFF[choice];
+  if (!c) return;
+  settings = { ...settings, remindersOff: choice === 'untilOn', offUntil: c.ms ? Date.now() + c.ms : null };
+  writeJSON(FILES.settings, settings);
+  [...cards].forEach((card) => closeCard(card.id));
+  send('stop-sound');
+  afterOnOff();
+}
+
+function turnOn() {
+  settings = { ...settings, remindersOff: false, offUntil: null };
+  writeJSON(FILES.settings, settings);
+  afterOnOff();
+}
+
+function afterOnOff() {
+  lastTrayLabel = '';
+  updateTray(new Date());
+  send('data-changed');
+}
 
 // The moment a reminder is warning you about, which Snooze must not go past.
 function reminderTarget(ev) {
@@ -873,7 +925,7 @@ function cardData(id, ev) {
 }
 
 function showCard(ev, notification) {
-  if (!settings.cards || cardsPaused()) return null;
+  if (!settings.cards || remindersOff()) return null;
   const id = crypto.randomUUID();
   const w = new BrowserWindow({
     ...CARD_SIZE,
@@ -968,12 +1020,6 @@ function cardAction(id, action) {
   closeCard(id);
 }
 
-function toggleCardPause() {
-  cardsPausedUntil = cardsPaused() ? 0 : Date.now() + 60 * MIN_MS;
-  if (cardsPaused()) [...cards].forEach((c) => closeCard(c.id));
-  lastTrayLabel = '';
-  updateTray(new Date());
-}
 
 const liveNotifications = new Set(); // keep references so click handlers aren't garbage-collected
 
@@ -1006,11 +1052,18 @@ function tick() {
     refreshMeetings();
     send('data-changed');
   }
+  // A 1-hour or 24-hour stop that has ended is cleared, so the menu bar icon comes back.
+  if (settings.offUntil && now >= settings.offUntil) {
+    settings = { ...settings, offUntil: null };
+    writeJSON(FILES.settings, settings);
+    afterOnOff();
+  }
+  const off = remindersOff();
   for (const ev of buildEvents(now)) {
     const delta = now - ev.at;
     if (delta >= 0 && delta < FIRE_WINDOW_MS && !ev.keys.some((k) => fired.has(k))) {
-      ev.keys.forEach((k) => fired.add(k));
-      fire(ev);
+      ev.keys.forEach((k) => fired.add(k)); // while off it's skipped, not saved for later
+      if (!off) fire(ev);
     }
   }
   updateTray(now);
@@ -1044,12 +1097,53 @@ const windowState = {
   lastCompact: ['mini', 'backstage'].includes(savedWindow.lastCompact) ? savedWindow.lastCompact : 'backstage',
   miniPos: savedWindow.miniPos || null,
   miniOnTop: flag(savedWindow.miniOnTop, true),
+  quitNoteShown: flag(savedWindow.quitNoteShown, false), // the one-time "Quit DayFlow?" note
 };
 const saveWindowState = () => writeJSON(FILES.windowState, windowState);
 
 function quit() {
   quitting = true;
   app.quit();
+}
+
+// Quitting from the window (⌘Q or Quit DayFlow in the sidebar). The first time, a note says
+// what quitting means, and how to silence reminders without quitting.
+async function quitFromWindow() {
+  if (!windowState.quitNoteShown) {
+    windowState.quitNoteShown = true;
+    saveWindowState();
+    const { response } = await dialog.showMessageBox(win && !win.isDestroyed() && win.isVisible() ? win : undefined, {
+      type: 'info',
+      message: 'Quit DayFlow?',
+      detail: 'Reminders stop until you open DayFlow again. To silence them without quitting, use Turn off reminders. (This note only shows once.)',
+      buttons: ['Quit', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response !== 0) return;
+  }
+  quit();
+}
+
+// The app menu: ⌘Q quits through quitFromWindow; Edit keeps copy and paste working in fields.
+function setAppMenu() {
+  if (process.platform !== 'darwin') return;
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Settings…', accelerator: 'Cmd+,', click: () => { showWindow(); send('show-settings'); } },
+        { type: 'separator' },
+        { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
+        { type: 'separator' },
+        { label: `Quit ${app.name}`, accelerator: 'Cmd+Q', click: quitFromWindow },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
+  ]));
 }
 
 function send(channel, payload) {
@@ -1242,13 +1336,26 @@ function showMiniMenu() {
   ]).popup({ window: mini });
 }
 
-function createTray() {
-  const file = process.platform === 'darwin' ? 'trayTemplate.png' : 'tray.png';
+// The menu bar icon, crossed out while reminders are off.
+function trayImage(off) {
+  const file = process.platform === 'darwin' ? (off ? 'trayOffTemplate.png' : 'trayTemplate.png') : (off ? 'trayOff.png' : 'tray.png');
   let img = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', file));
   if (process.platform !== 'darwin') img = img.resize({ width: 16, height: 16 });
-  tray = new Tray(img);
+  return img;
+}
+
+function createTray() {
+  tray = new Tray(trayImage(remindersOff()));
   tray.setToolTip('DayFlow');
   tray.on('click', showWindow);
+}
+
+// Turn off reminders ▸ For 1 hour / For 24 hours / Until I turn them on, or, while off, the
+// status and Turn on reminders.
+function onOffMenuItems() {
+  const status = offStatus();
+  if (status) return [{ label: status, enabled: false }, { label: 'Turn on reminders', click: turnOn }];
+  return [{ label: 'Turn off reminders', submenu: Object.entries(TURN_OFF).map(([id, c]) => ({ label: c.label, click: () => turnOff(id) })) }];
 }
 
 // The tray menu doubles as the control panel in Backstage: what's on now, then the modes.
@@ -1258,11 +1365,7 @@ function buildTrayMenu(label) {
     { type: 'separator' },
     ...MODES.map((m) => ({ label: MODE_LABELS[m], type: 'radio', checked: mode === m, click: () => setMode(m) })),
     { type: 'separator' },
-    {
-      label: cardsPaused() ? `Resume reminder cards (paused until ${fmt(new Date(cardsPausedUntil))})` : 'Pause reminder cards for 1 hour',
-      enabled: settings.cards,
-      click: toggleCardPause,
-    },
+    ...onOffMenuItems(),
     { label: 'Sync calendar now', click: () => refreshMeetings() },
     { type: 'separator' },
     { label: 'Quit DayFlow', click: quit },
@@ -1279,10 +1382,12 @@ function updateTray(now) {
     label = `${current.title}, ${mins} min left`;
     short = ` ${mins}m`;
   }
-  const key = `${label}|${cardsPaused()}`; // the menu also changes when a card pause ends
+  const status = offStatus(now);
+  const key = `${label}|${status}`; // the menu also changes when reminders go off or on
   if (key === lastTrayLabel) return;
   lastTrayLabel = key;
-  tray.setToolTip(`DayFlow: ${label}`);
+  tray.setImage(trayImage(!!status));
+  tray.setToolTip(status ? `DayFlow: ${status}` : `DayFlow: ${label}`);
   if (process.platform === 'darwin') tray.setTitle(short);
   buildTrayMenu(label);
 }
@@ -1538,6 +1643,7 @@ function registerIpc() {
     customSounds,
     folderFiles,
     clipsFolder: CLIPS_DIR,
+    offStatus: offStatus(),
     builtinSounds: BUILTIN,
     blockTypes,
     mode,
@@ -1788,6 +1894,14 @@ function registerIpc() {
     if (typeof url === 'string' && /^https:\/\//.test(url)) shell.openExternal(url);
   });
 
+  ipcMain.handle('turn-off', (_e, choice) => { turnOff(String(choice)); return offStatus(); });
+  ipcMain.handle('turn-on', () => { turnOn(); return null; });
+  ipcMain.handle('turn-off-menu', () => popup(Object.entries(TURN_OFF).map(([id, c]) => ({ id, label: c.label }))).then((id) => {
+    if (id) turnOff(id);
+    return offStatus();
+  }));
+  ipcMain.handle('quit', () => quitFromWindow());
+
   ipcMain.handle('test-notification', () => {
     const r = typeOf(DEFAULT_TYPE).reminders.start;
     fire({ role: 'start', sound: r.sound, fade: r.fade, title: 'Now: Test block', body: 'This is what a block starting looks like.' });
@@ -1812,6 +1926,7 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'win32') app.setAppUserModelId('com.dayflow.app');
     loadData();
     registerIpc();
+    setAppMenu();
     // Opening at login always starts backstage, without forgetting the mode you last used.
     const atLogin = process.argv.includes('--hidden') ||
       (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin);

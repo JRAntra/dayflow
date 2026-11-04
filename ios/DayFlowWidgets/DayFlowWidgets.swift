@@ -137,6 +137,8 @@ struct BlockEntry: TimelineEntry {
     let next: WidgetSnapshot.Item?
     /// false when the widgets can't read DayFlow's data (no App Group with this signing).
     let hasData: Bool
+    /// Reminders are turned off at this moment.
+    var off = false
 }
 
 struct BlockTimeline: TimelineProvider {
@@ -159,9 +161,13 @@ struct BlockTimeline: TimelineProvider {
     /// An entry now and at every start and end over the snapshot, so the widget switches on time.
     func entries(from now: Date) -> [BlockEntry] {
         guard let snap = WidgetSnapshot.read() else { return [BlockEntry(date: now, current: nil, next: nil, hasData: false)] }
-        let moments = Set(snap.items.flatMap { [$0.start, $0.end] }.filter { $0 > now })
+        // An entry at each start and end, and when a 1-hour or 24-hour stop ends.
+        let ends = [snap.offUntil].compactMap { $0 }.filter { $0 > now && $0 != .distantFuture }
+        let moments = Set(snap.items.flatMap { [$0.start, $0.end] }.filter { $0 > now } + ends)
         let dates = [now] + moments.sorted().prefix(60)
-        return dates.map { d in BlockEntry(date: d, current: snap.current(at: d), next: snap.next(after: d), hasData: true) }
+        return dates.map { d in
+            BlockEntry(date: d, current: snap.current(at: d), next: snap.next(after: d), hasData: true, off: snap.remindersOff(at: d))
+        }
     }
 }
 
@@ -195,8 +201,15 @@ struct CurrentBlockView: View {
             } else {
                 Text(entry.hasData ? "Nothing more today" : "Open DayFlow").font(.headline)
             }
+            if entry.off { offLine }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    var offLine: some View {
+        Label("Reminders off", systemImage: "bell.slash.fill")
+            .font(.caption2.weight(.semibold)).foregroundStyle(Palette.sun)
+            .lineLimit(1)
     }
 
     @ViewBuilder var medium: some View {
@@ -229,7 +242,8 @@ struct CurrentBlockView: View {
             if let c = entry.current {
                 Text(c.title).font(.headline).lineLimit(1).widgetAccentable()
                 Text(timerInterval: c.start...c.end, countsDown: true).monospacedDigit()
-                if let n = entry.next { Text("Next: \(n.title)").font(.caption).lineLimit(1).foregroundStyle(.secondary) }
+                if entry.off { Text("Reminders off").font(.caption).lineLimit(1) }
+                else if let n = entry.next { Text("Next: \(n.title)").font(.caption).lineLimit(1).foregroundStyle(.secondary) }
             } else if let n = entry.next {
                 Text("Up next").font(.caption).foregroundStyle(.secondary)
                 Text(n.title).font(.headline).lineLimit(1).widgetAccentable()
@@ -251,7 +265,9 @@ struct CurrentBlockView: View {
     }
 
     @ViewBuilder var inline: some View {
-        if let c = entry.current {
+        if entry.off {
+            Text("DayFlow reminders off")
+        } else if let c = entry.current {
             Text("\(c.title) until \(c.end.formatted(date: .omitted, time: .shortened))")
         } else if let n = entry.next {
             Text("Next: \(n.title) at \(n.start.formatted(date: .omitted, time: .shortened))")

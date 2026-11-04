@@ -43,6 +43,11 @@ contextBridge.exposeInMainWorld('dayflow', {
     }
   }),
   onToast: (fn) => ipcRenderer.on('toast', (_e, msg) => fn(msg)),
+  turnOffMenu: () => ipcRenderer.invoke('turn-off-menu'),
+  turnOff: (choice) => ipcRenderer.invoke('turn-off', choice), // 'hour', 'day' or 'untilOn'
+  turnOn: () => ipcRenderer.invoke('turn-on'),
+  quit: () => ipcRenderer.invoke('quit'),
+  onShowSettings: (fn) => ipcRenderer.on('show-settings', () => fn()),
   saveBlockTypes: (types) => ipcRenderer.invoke('save-block-types', types),
 
   // Export and import

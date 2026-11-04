@@ -65,7 +65,7 @@ DayFlow opens with a sample weekday schedule so you can see how it works:
 
 Change or delete any of it in [Schedule](#4-schedule-planning-your-blocks).
 
-DayFlow keeps running after you close its window. A small **sun-over-water icon** appears in the menu bar, with the minutes left in the current block next to it. To quit, click that icon and choose **Quit DayFlow**.
+DayFlow keeps running after you close its window. A small **sun-over-water icon** appears in the menu bar, with the minutes left in the current block next to it. To quit, choose **Quit DayFlow** at the bottom of the sidebar, press **⌘Q**, or click the menu bar icon and choose **Quit DayFlow**. To silence it without quitting, see [Turning reminders off](#turning-reminders-off).
 
 ---
 
@@ -218,6 +218,29 @@ The rule is simple: **the block that's coming up wins**. If the incoming block h
 
 Clicking a block reminder opens DayFlow's window, and clicking a meeting reminder opens its video link. Either way, the sound stops and the matching reminder card closes.
 
+### Turning reminders off
+
+To silence DayFlow without quitting, click **Turn off reminders…** under the dial on Today, or use the menu bar icon's **Turn off reminders** menu. Choose how long:
+
+| Choice | Reminders come back |
+|---|---|
+| **For 1 hour** | An hour from now |
+| **For 24 hours** | 24 hours from now |
+| **Until I turn them on** | Only when you choose **Turn on**, even after restarting your Mac |
+
+While reminders are off, nothing rings: no notifications, no sounds, no cards. Reminders that fall in that time are skipped, not delivered late. Today still shows your blocks, with *Reminders off until 3:15 PM · Turn on* under the dial, and the menu bar icon is crossed out. **Turn on** (on Today, or **Turn on reminders** in the menu bar icon's menu) brings them back straight away. DayFlow never sends a notification about being off, and a 1-hour or 24-hour stop ends quietly.
+
+### Quitting DayFlow
+
+Closing the window doesn't quit DayFlow (see [Window modes](#10-window-modes-full-mini-timer-and-backstage)). To stop it completely, reminders included, use any of:
+
+- **Quit DayFlow** at the bottom of the sidebar;
+- **⌘Q** while the window is in front;
+- the menu bar icon → **Quit DayFlow**;
+- right-click the Mini timer → **Quit DayFlow**.
+
+The first time you quit from the window, DayFlow explains once that reminders stop until you open it again. Open DayFlow from Applications to start again; with **Open at login** on, it also starts at your next login.
+
 ---
 
 ## 7. Reminder cards
@@ -252,9 +275,9 @@ Up to three cards show at once, newest on top. If more are waiting, the bottom c
 
 - **Settings → General → Show reminder cards** turns cards off. You still get notifications.
 - **Close cards on their own** can make cards close after **1 min** or **5 min**. The default is **Never**.
-- The menu bar icon's **Pause reminder cards for 1 hour** hides cards for an hour, for example during a presentation. While paused, the menu says *Resume reminder cards (paused until 3:15 PM)*.
+- To stop cards (and everything else) for a while, for example during a presentation, [turn reminders off](#turning-reminders-off) for 1 hour.
 
-macOS doesn't let apps see whether **Focus** or **Do Not Disturb** is on. Notifications respect Focus, but cards can't, so pause or turn them off when you need quiet.
+macOS doesn't let apps see whether **Focus** or **Do Not Disturb** is on. Notifications respect Focus, but cards can't, so [turn reminders off](#turning-reminders-off) when you need quiet.
 
 ---
 
@@ -382,7 +405,7 @@ The sun-over-water icon in the menu bar shows the minutes left in the current bl
 
 - **What's on now**: for example *Deep work, 23 min left*, or *No block right now*.
 - **Full window / Mini timer / Backstage (tray only)**: the current mode is ticked.
-- **Pause reminder cards for 1 hour**, or **Resume reminder cards** while paused.
+- **Turn off reminders ▸ For 1 hour / For 24 hours / Until I turn them on**. While they're off, the icon is crossed out and the menu shows *Reminders off until…* and **Turn on reminders** instead.
 - **Sync calendar now.**
 - **Quit DayFlow.**
 
@@ -508,12 +531,12 @@ Only one copy of DayFlow runs at a time; opening it again brings the running cop
 | Add your own sound | **Settings → Sounds → Add a Clip ▾** (record, choose a file), drag files onto Your clips, or put them in **Music → DayFlow Clips** |
 | Make a sound gentler | Press **Fade in** next to it |
 | Snooze a reminder | **Snooze ▾** on its card |
-| Silence cards for a while | Menu bar icon → **Pause reminder cards for 1 hour** |
+| Silence DayFlow for a while | **Turn off reminders…** on Today, or in the menu bar icon's menu |
 | Switch Full / Mini / Backstage | **⌃⌥D**, the sidebar, or the menu bar icon |
 | Get reminders for meetings | **Settings → Calendar**, then **Settings → Meetings** |
 | Back up or share your plan | **Schedule → Export…** |
 | Undo an import | **Schedule → Backups**, then import the newest backup |
-| Quit | Menu bar icon → **Quit DayFlow** |
+| Quit | **Quit DayFlow** in the sidebar, **⌘Q**, or menu bar icon → **Quit DayFlow** |
 
 ---
 
@@ -547,7 +570,7 @@ Three tabs at the bottom:
 
 | Tab | What's there |
 |---|---|
-| **Today** | The dial, the current block with its countdown, **Pause reminders for 1 hour**, and today's flow, with meetings and their **Join** buttons |
+| **Today** | The dial, the current block with its countdown, **Turn off reminders…**, and today's flow, with meetings and their **Join** buttons |
 | **Schedule** | Your weekly plan as a **List** or one **Day** at a time. **＋** adds a block; **⋯** has **Import…**, **Export…** and **Backups** |
 | **Settings** | **Block types**, **Meetings**, **Sounds**, **Calendars** and **General** |
 
@@ -583,7 +606,8 @@ What's different on iPhone:
 - **There's no Snooze** and no reminder cards. Swipe a notification away when you're done with it.
 - **Meeting reminders** with a video link have a **Join** button (press and hold the notification to see it). Tapping the notification joins too. Without a link, the button is **Open in Calendar**.
 - **Tapping a block reminder** opens Today.
-- **Pause reminders for 1 hour** on Today silences sounds and banners for an hour. They come back by themselves, and **Resume** ends the pause early.
+- **Turn off reminders…** on Today (or in Settings → General) silences everything **For 1 hour**, **For 24 hours** or **Until I turn them on**. DayFlow removes every scheduled notification and ends the Live Activity, so nothing rings, even if you then swipe DayFlow away. Today shows *Reminders off… · Turn on*, the widgets show *Reminders off*, and **Turn on** reschedules everything. Reminders that fall in the off time are skipped.
+- **Swiping DayFlow away doesn't stop reminders.** iOS delivers the notifications DayFlow scheduled ahead whether or not the app is running, and doesn't tell an app it's been swiped away. Use **Turn off reminders** instead.
 - **Settings → General → Send a test notification** shows what a block starting looks like. **Scheduled ahead** says how far ahead your reminders go.
 
 ### Sounds on iPhone

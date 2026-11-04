@@ -33,7 +33,8 @@ enum ReminderScheduler {
     static func reschedule(planner: Planner, store: DataStore, now: Date = Date()) async -> Int {
         let center = UNUserNotificationCenter.current()
         let s = store.settings
-        let window = planner.window(from: now, pausedUntil: s.pausedUntil, sound: s.sound)
+        // While reminders are off, nothing is scheduled (or, for 1 or 24 hours, nothing before then).
+        let window = planner.window(from: now, pausedUntil: s.offUntil(at: now), sound: s.sound)
 
         var requests: [UNNotificationRequest] = []
         var soundFiles = Set<String>()

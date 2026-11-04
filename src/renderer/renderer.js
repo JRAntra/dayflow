@@ -78,6 +78,8 @@ async function loadAll() {
   state.google = all.google;
   state.customSounds = all.customSounds;
   state.folderFiles = all.folderFiles || [];
+  state.offStatus = all.offStatus || null;
+  renderOnOff();
   state.builtinSounds = all.builtinSounds;
   if (!typesTimer) state.blockTypes = all.blockTypes;
   state.shortcutActive = all.shortcutActive;
@@ -690,6 +692,27 @@ function soundOptions() {
   const mine = state.customSounds.map((c) => `<option value="custom:${esc(c.id)}">${esc(c.name)}</option>`).join('');
   return `<optgroup label="Built-in">${builtIn}</optgroup>${mine ? `<optgroup label="Your clips">${mine}</optgroup>` : ''}`;
 }
+
+// Turn off reminders… under the dial, or, while they're off, the status and Turn on.
+function renderOnOff() {
+  const status = state.offStatus;
+  $('turn-off').hidden = !!status;
+  $('off-line').hidden = !status;
+  $('off-status').textContent = status || '';
+}
+$('turn-off').addEventListener('click', async () => {
+  state.offStatus = await dayflow.turnOffMenu();
+  renderOnOff();
+  if (state.offStatus) toast(state.offStatus);
+});
+$('turn-on').addEventListener('click', async () => {
+  await dayflow.turnOn();
+  state.offStatus = null;
+  renderOnOff();
+  toast('Reminders on');
+});
+$('quit-app').addEventListener('click', () => dayflow.quit());
+dayflow.onShowSettings(() => showView('settings'));
 
 // Your clips live in the Clips folder (Music › DayFlow Clips). The list shows them, then any file
 // in the folder that isn't a clip: a long song waiting for its 30 seconds, or one DayFlow can't use.

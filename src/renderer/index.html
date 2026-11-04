@@ -25,6 +25,7 @@
       <button class="nav-item" data-mode="mini" title="A small floating countdown"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="6" rx="3"/></svg><span>Mini timer</span></button>
       <button class="nav-item" data-mode="backstage" title="Tray only: no window, no Dock icon"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="3.5" rx="1.2"/><path d="M5 11h10M7 14.5h6"/></svg><span>Backstage</span></button>
       <kbd id="rail-kbd" class="rail-kbd" title="Cycles Full, Mini timer and Backstage"></kbd>
+      <button class="nav-item quit-item" id="quit-app" title="Stops DayFlow and its reminders until you open it again (⌘Q)"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v6"/><path d="M6.2 5.6a6 6 0 1 0 7.6 0"/></svg><span>Quit DayFlow</span></button>
     </div>
   </aside>
 
@@ -50,6 +51,10 @@
               <p id="now-note" class="now-note"></p>
               <button id="now-plan" class="btn primary" hidden>Plan your blocks</button>
             </div>
+          </div>
+          <div class="on-off" id="on-off">
+            <button id="turn-off" class="btn" aria-haspopup="menu">Turn off reminders…</button>
+            <p id="off-line" class="off-line" hidden><span id="off-status"></span><button id="turn-on" class="btn small">Turn on</button></p>
           </div>
         </div>
         <div class="agenda">

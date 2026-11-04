@@ -273,3 +273,12 @@ dialog.sheet > p { margin: var(--space-2) 0; }
 #piece-start { width: 100%; margin: var(--space-3) 0; }
 .help-list { margin: 0; padding-left: 1.2em; }
 .help-list li { margin: 4px 0; }
+
+/* Turn off reminders, under the dial; and Quit in the sidebar */
+.on-off { display: flex; justify-content: center; margin-top: var(--space-3); }
+.on-off #turn-off { width: min(320px, 100%); }
+.off-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; margin: 0;
+  padding: 8px 12px; border-radius: var(--radius-md); background: var(--sun-soft); color: color-mix(in srgb, var(--sun) 80%, var(--label)); font-weight: 500; }
+.off-line::before { content: ""; width: 14px; height: 14px; flex: none; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 2a4 4 0 0 0-4 4v3l-1.5 2h11L12 9V6a4 4 0 0 0-4-4zM6.5 13a1.5 1.5 0 0 0 3 0M2 2l12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat; }
+.off-line #off-status { flex: 1; }
+.sidebar-foot .quit-item { margin-top: var(--space-2); }
