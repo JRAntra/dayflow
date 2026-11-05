@@ -115,10 +115,11 @@ Meetings with a video link have a **Join** button until they end.
 
 | Part | What it does |
 |---|---|
-| **Starts / Ends** | The block's start and end times. |
+| **Starts / Ends** | The block's start and end times. Leave **Ends** empty (or click its **×**) for a [moment](#moments). |
 | **Name** | What happens in the block. |
-| **Type** | The small menu under the name. The type decides the block's reminders (see [Block types](#5-block-types-and-their-reminders)). **New type…** at the bottom of the menu takes you to Settings → Block types. |
-| **Length** | Worked out for you, for example *2 h 10 min*. |
+| **Type** | The small menu under the name. The type decides the block's reminders (see [Block types](#5-block-types-and-their-reminders)), or choose **Own reminders** to set them for this block alone (see [A block's own reminders](#a-blocks-own-reminders)). **New type…** at the bottom of the menu takes you to Settings → Block types. |
+| **Length** | Worked out for you, for example *2 h 10 min*, or *Moment*. |
+| **Reminders ▸** | Shows the block's reminders under the row. |
 | **Repeats on** | The days of the week, S M T W T F S. Click a day to turn it on or off. |
 | **×** | Removes the block. |
 
@@ -133,7 +134,22 @@ As soon as you change anything, a bar appears at the bottom: **Unsaved changes �
 - **Save schedule** saves your changes and updates reminders straight away.
 - **Discard** puts the schedule back to how it was last saved.
 
-DayFlow checks each block before saving. A block needs a name, an end time after its start time, and at least one day. A block with a problem gets a red outline and a message under it. Overlapping blocks are allowed, but the row tells you which block it overlaps.
+DayFlow checks each block before saving. A block needs a name, an end time after its start time (or no end, for a moment), and at least one day. A block with a problem gets a red outline and a message under it. Overlapping blocks are allowed, but the row tells you which block it overlaps.
+
+### Moments
+
+A **moment** is a block with only a start time, for something that happens at one moment rather than lasting, such as *Take medicine · 1:00 PM*. Leave its **Ends** field empty, or click the **×** in it.
+
+- A moment gets two reminders: **Start preparation** (*In 5 min: Take medicine · Get ready. It's at 1:00 PM.*) and **Start** (*Now: Take medicine · It's 1:00 PM.*, or *…during Lunch.* when a block is running). Heads-up and Time's up don't apply.
+- On Today, a moment is a **dot** on the dial and a **diamond** in Today's flow, marked *at 1:00 PM*. It's never "the current block", though it can be what's next.
+- A moment never counts as overlapping a block, and its reminders are never merged with a block's: at 1:00 PM you get the moment's reminder and the block's, each with its own sound.
+- To give a moment an end again, type an end time.
+
+### A block's own reminders
+
+Normally a block's reminders come from its [type](#5-block-types-and-their-reminders). To set them for one block alone, choose **Own reminders** at the top of its Type menu. **Reminders ▸** under the row then shows the block's reminder rows, editable: switches, minutes ahead, sounds, Fade in and ▶. They start as a copy of the type's, and from then on later changes to the type don't affect the block. They're saved with **Save schedule**.
+
+With a type chosen, **Reminders ▸** shows that type's settings, read-only (▶ still plays them): *From the Focus type. Change it in Settings → Block types, or choose Own reminders.* Choosing a type for a block with its own reminders asks first, because its own settings are removed. Such blocks show **Own** as their type on Today, in cards and in the menu bar.
 
 ### Import, export and backups
 
@@ -431,12 +447,12 @@ The sun-over-water icon in the menu bar shows the minutes left in the current bl
 
 **Schedule → Export…** saves a `.json` file containing:
 
-- your blocks;
+- your blocks and moments, with any block's own reminders;
 - the block types they use, with all four reminders each;
 - your Meetings reminders and volume;
 - any of your own sound clips those reminders use (built into the file, so it works on another Mac).
 
-It **never** includes your Google sign-in. Use exports to back up your plan, move it to another Mac, or share a schedule with someone.
+It **never** includes your Google sign-in. Files from this version (with moments and own reminders) need an up-to-date DayFlow to import; an older version says *"That file was made by a newer version of DayFlow."* Older files still import. Use exports to back up your plan, move it to another Mac, or share a schedule with someone.
 
 ### Import
 
@@ -578,15 +594,17 @@ Three tabs at the bottom:
 
 **List** shows every block, earliest first, with its type, days and length. The day strip (**All · M T W T F S S**) shows one day's blocks.
 
-- **Tap a block** to edit it: name, type, start and end times, and the days it repeats on. **Save** applies the change straight away and updates reminders. There's no separate Save schedule step.
-- **Save** stays greyed out until the block has a name, ends after it starts, and repeats on at least one day. Overlapping blocks are allowed; the block shows which one it overlaps.
+- **Tap a block** to edit it: name, type, start and end times, the days it repeats on, and its **Reminders**. **Save** applies the change straight away and updates reminders. There's no separate Save schedule step.
+- **Ends** has a switch: turn it off for a [moment](#moments), a block with only a start time. The list shows *Moment* instead of the length.
+- **Own reminders**, at the top of the Type menu, makes the **Reminders** section editable for this block alone, starting from its type's settings. With a type, the section shows that type's reminders, read-only. Choosing a type again asks first. See [A block's own reminders](#a-blocks-own-reminders).
+- **Save** stays greyed out until the block has a name, ends after it starts (or has no end), and repeats on at least one day. Overlapping blocks are allowed; the block shows which one it overlaps.
 - **＋** adds a block, following the Mac's rule: it starts where your latest block ends, lasts 30 minutes, and copies that block's days and type.
 - **Swipe left** on a block to delete it. **Undo** appears for a few seconds.
 - **New type…** in the Type menu adds a block type and opens its reminders.
 
 **Day** shows one weekday as an hour grid, like the Calendar app:
 
-- **Press and hold** a block, then drag, to move it. Times snap to 5 minutes, with a light tick.
+- **Press and hold** a block, then drag, to move it. Times snap to 5 minutes, with a light tick. A moment is a thin line at its time; hold and drag it to move it.
 - A held block shows **handles** at its top and bottom edges. Drag one to change its start or end time. A block can't be shorter than 5 minutes.
 - **Tap** a block to edit it. **Tap an empty slot** to add a 30-minute block there.
 - If the block repeats on several days, DayFlow asks after each change: **This day only** (the block is split off for that day, and the original keeps its other days) or **All N days**. A block on just one day never asks.

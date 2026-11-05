@@ -79,6 +79,16 @@ public struct Planner: Sendable {
         types.first { $0.id == id } ?? types.first { $0.isDefault } ?? BlockType(id: Specs.defaultType, name: "Default")
     }
 
+    /// The reminders a block uses: its own, or its type's.
+    public func reminders(for b: Block) -> TypeReminders {
+        b.hasOwnReminders ? (b.reminders ?? Specs.startingTypeReminders) : typeOf(b.type).reminders
+    }
+
+    /// "Focus", or "Own" for a block with its own reminders.
+    public func typeName(for b: Block) -> String {
+        b.hasOwnReminders ? Specs.ownTypeName : typeOf(b.type).name
+    }
+
     // MARK: Times
 
     public func time(_ d: Date) -> String { TimeText.time(d, calendar: calendar, locale: locale) }
@@ -92,12 +102,16 @@ public struct Planner: Sendable {
         calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: calendar.startOfDay(for: day)) ?? day
     }
 
-    /// The blocks that run on this date, earliest first.
+    /// The blocks (and moments) that run on this date, earliest first. A moment's end is its start,
+    /// so it's never "the current block".
     public func blocksFor(_ date: Date) -> [DayBlock] {
         let dow = calendar.component(.weekday, from: date) - 1 // Calendar: 1 is Sunday
-        let list = blocks.filter { $0.days.contains(dow) && $0.endMin > $0.startMin }
-            .map { DayBlock(block: Block(id: $0.id, title: $0.title, start: $0.start, end: $0.end, days: $0.days, type: typeOf($0.type).id),
-                            start: at(date, $0.startMin), end: at(date, $0.endMin)) }
+        let list = blocks.filter { $0.days.contains(dow) && ($0.isMoment || $0.endMin > $0.startMin) }
+            .map { b -> DayBlock in
+                var copy = b
+                if !b.hasOwnReminders { copy.type = typeOf(b.type).id }
+                return DayBlock(block: copy, start: at(date, b.startMin), end: at(date, b.endMin))
+            }
         return list.enumerated().sorted { a, b in
             a.element.start != b.element.start ? a.element.start < b.element.start : a.offset < b.offset
         }.map(\.element)
@@ -108,11 +122,13 @@ public struct Planner: Sendable {
     public func events(on date: Date) -> [PlannedReminder] {
         let day = dayKey(date)
         let midnight = calendar.startOfDay(for: date)
-        let list = blocksFor(date)
+        let all = blocksFor(date)
+        // Blocks hand over to blocks; moments are reminded about separately, never merged.
+        let list = all.filter { !$0.block.isMoment }
         var events: [PlannedReminder] = []
 
         for b in list {
-            let r = typeOf(b.type).reminders
+            let r = reminders(for: b.block)
             let prev = list.first { $0.block.id != b.block.id && $0.end == b.start }
             let next = list.first { $0.block.id != b.block.id && $0.start >= b.end }
             func key(_ role: String) -> String { "\(day)|block|\(b.block.id)|\(role)" }
@@ -145,6 +161,26 @@ public struct Planner: Sendable {
         }
 
         var merged = mergeSameMoment(events, list)
+
+        // Moments: "In 5 min: Take medicine" and "Now: Take medicine", with the block they fall in.
+        for m in all where m.block.isMoment {
+            let r = reminders(for: m.block)
+            let during = list.first { $0.start <= m.start && m.start < $0.end }
+            func key(_ role: String) -> String { "\(day)|moment|\(m.block.id)|\(role)" }
+            let lead = r.prep.lead ?? Specs.defaultLead
+            let prepAt = m.start.addingTimeInterval(-Double(lead) * 60)
+            if r.prep.on && prepAt >= midnight {
+                merged.append(PlannedReminder(keys: [key("prep")], at: prepAt, role: .prep, blockId: m.block.id,
+                                              title: "In \(lead) min: \(m.title)", body: "Get ready. It's at \(time(m.start)).",
+                                              sound: r.prep.sound, fade: r.prep.fade, meeting: nil, day: day))
+            }
+            if r.start.on {
+                let body = during.map { "It's \(time(m.start)), during \($0.title)." } ?? "It's \(time(m.start))."
+                merged.append(PlannedReminder(keys: [key("start")], at: m.start, role: .start, blockId: m.block.id,
+                                              title: "Now: \(m.title)", body: body, sound: r.start.sound, fade: r.start.fade,
+                                              meeting: nil, day: day))
+            }
+        }
 
         let m = meetingReminders
         for mt in meetings where dayKey(mt.start) == day {

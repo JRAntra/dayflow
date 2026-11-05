@@ -205,9 +205,12 @@ function removeClip(id) {
   };
   for (const t of blockTypes) resetIn(t.reminders, REMINDERS, t.name);
   resetIn(settings.meetings, MEETING_REMINDERS, 'Meetings');
+  const before = reset.length;
+  for (const b of schedule?.blocks || []) if (b.reminders) resetIn(b.reminders, REMINDERS, b.title);
   if (reset.length) {
     writeJSON(FILES.blockTypes, blockTypes);
     writeJSON(FILES.settings, settings);
+    if (reset.length > before) writeJSON(FILES.schedule, schedule);
   }
   return reset;
 }
@@ -478,7 +481,7 @@ function upgradeV1({ settings: s = {}, blockTypes: oldTypes, blocks = [] }) {
   const lead = clamp(s.meetingLeadMin, 0, 60, DEFAULT_LEAD);
   return {
     types,
-    blocks: blocks.map((b) => ({ ...b, type: ids.get(String(b.type)) || DEFAULT_TYPE })),
+    blocks: blocks.map((b) => ({ ...b, type: b.type === 'own' && b.reminders ? 'own' : ids.get(String(b.type)) || DEFAULT_TYPE })),
     meetings: {
       before: { on: lead > 0, lead: lead || DEFAULT_LEAD, sound: g.meeting },
       start: { on: true, sound: g.meeting },
@@ -549,13 +552,23 @@ function at(base, hhmm) {
 const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 const fmt = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
+// A block with no end is a moment: it happens at its start time. Its end is its start, so it's
+// never "the current block". A block of type "own" carries its own reminders.
+const OWN_TYPE = 'own';
+const isMoment = (b) => !b.end;
 function blocksFor(date) {
   const dow = date.getDay();
   return (schedule.blocks || [])
-    .filter((b) => Array.isArray(b.days) && b.days.includes(dow) && toMin(b.end) > toMin(b.start))
-    .map((b) => ({ id: b.id, title: b.title, type: typeOf(b.type).id, start: at(date, b.start), end: at(date, b.end) }))
+    .filter((b) => Array.isArray(b.days) && b.days.includes(dow) && (isMoment(b) || toMin(b.end) > toMin(b.start)))
+    .map((b) => ({
+      id: b.id, title: b.title, type: b.type === OWN_TYPE ? OWN_TYPE : typeOf(b.type).id, reminders: b.reminders,
+      moment: isMoment(b), start: at(date, b.start), end: at(date, b.end || b.start),
+    }))
     .sort((a, b) => a.start - b.start);
 }
+// The reminders a block uses: its own, or its type's.
+const remindersFor = (b) => (b.type === OWN_TYPE && b.reminders ? b.reminders : typeOf(b.type).reminders);
+const typeNameFor = (b) => (b.type === OWN_TYPE ? 'Own' : typeOf(b.type).name);
 
 // ---------------------------------------------------------------------------
 // Google Calendar
@@ -726,10 +739,12 @@ function buildEvents(now) {
   const day = dayKey(now);
   const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
-  const blocks = blocksFor(now);
+  const all = blocksFor(now);
+  // Blocks hand over to blocks; moments are reminded about separately and never merged.
+  const blocks = all.filter((b) => !b.moment);
 
   for (const b of blocks) {
-    const r = typeOf(b.type).reminders;
+    const r = remindersFor(b);
     const prev = blocks.find((p) => p !== b && p.end.getTime() === b.start.getTime());
     const next = blocks.find((n) => n !== b && n.start >= b.end);
     const key = (role) => `${day}|block|${b.id}|${role}`;
@@ -764,6 +779,22 @@ function buildEvents(now) {
   }
 
   const merged = mergeSameMoment(events);
+
+  // Moments: "In 5 min: Take medicine" and "Now: Take medicine", with the block they fall in.
+  for (const mo of all.filter((b) => b.moment)) {
+    const r = remindersFor(mo);
+    const during = blocks.find((b) => b.start <= mo.start && mo.start < b.end);
+    const key = (role) => `${day}|moment|${mo.id}|${role}`;
+    const prepAt = new Date(mo.start - r.prep.lead * MIN_MS);
+    if (r.prep.on && prepAt >= midnight) {
+      merged.push({ keys: [key('prep')], at: prepAt, role: 'prep', block: mo, sound: r.prep.sound, fade: r.prep.fade,
+        title: `In ${r.prep.lead} min: ${mo.title}`, body: `Get ready. It's at ${fmt(mo.start)}.` });
+    }
+    if (r.start.on) {
+      merged.push({ keys: [key('start')], at: mo.start, role: 'start', block: mo, sound: r.start.sound, fade: r.start.fade,
+        title: `Now: ${mo.title}`, body: during ? `It's ${fmt(mo.start)}, during ${during.title}.` : `It's ${fmt(mo.start)}.` });
+    }
+  }
 
   const m = settings.meetings;
   for (const mt of meetings) {
@@ -913,11 +944,11 @@ function cardData(id, ev) {
   return {
     id,
     role: ev.role,
-    label: meeting ? 'Meeting' : b ? typeOf(b.type).name : typeOf(DEFAULT_TYPE).name,
+    label: meeting ? 'Meeting' : b ? typeNameFor(b) : typeOf(DEFAULT_TYPE).name,
     meeting,
     title: ev.title,
     // Preparation already says when in its title, so its line is just the block's time.
-    sub: ev.role === 'prep' ? `Get ready · ${fmt(b.start)} – ${fmt(b.end)}` : ev.body,
+    sub: ev.role === 'prep' ? (b.moment ? `Get ready · at ${fmt(b.start)}` : `Get ready · ${fmt(b.start)} – ${fmt(b.end)}`) : ev.body,
     join: meeting && ev.meeting.url ? 'join' : meeting && ev.meeting.htmlLink ? 'calendar' : null,
     snooze: target ? SNOOZE_CHOICES.filter((m) => target - Date.now() > m * MIN_MS + 20 * 1000) : [],
     more: 0,
@@ -1399,7 +1430,7 @@ function updateTray(now) {
 // Importing replaces the schedule, after backing up the current one in the same format.
 // ---------------------------------------------------------------------------
 
-const EXPORT_VERSION = 2;
+const EXPORT_VERSION = 3; // 3: blocks can be moments (no end) and carry their own reminders
 const MAX_IMPORT_BYTES = 40 * 1024 * 1024;
 const MAX_BACKUPS = 10;
 let pendingImport = null; // what the import preview showed, waiting for Replace
@@ -1421,7 +1452,8 @@ const soundsIn = (reminders) => Object.values(reminders).map((r) => r.sound);
 function exportPayload({ backup = false } = {}) {
   const usedTypes = new Set(schedule.blocks.map((b) => b.type));
   const types = blockTypes.filter((t) => backup || usedTypes.has(t.id));
-  const used = new Set([...types.flatMap((t) => soundsIn(t.reminders)), ...soundsIn(settings.meetings)]);
+  const used = new Set([...types.flatMap((t) => soundsIn(t.reminders)), ...soundsIn(settings.meetings),
+    ...schedule.blocks.flatMap((b) => (b.reminders ? soundsIn(b.reminders) : []))]);
   return {
     dayflowExport: EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -1534,8 +1566,11 @@ function readImport(file) {
   }
   if (missing.length) problems.push(`A sound clip is missing from the file, so ${missing.join(', ')} will use the starting sound.`);
 
+  // A block's own reminders: their sounds are checked against the file's clips too.
+  const fileBlocks = Array.isArray(data.schedule?.blocks) ? data.schedule.blocks.map((b) => (b && b.type === OWN_TYPE && b.reminders
+    ? { ...b, reminders: remindersFromFile(b.reminders, REMINDERS, String(b.title || 'A block')) } : b)) : data.schedule?.blocks;
   let blocks;
-  try { blocks = sanitizeBlocks(data.schedule?.blocks, new Set(types.keys()), fileDefault || DEFAULT_TYPE); } catch (e) {
+  try { blocks = sanitizeBlocks(fileBlocks, new Set(types.keys()), fileDefault || DEFAULT_TYPE, (v) => typeof v === 'string'); } catch (e) {
     throw new Error(`The schedule in that file has a problem: ${e.message}`);
   }
 
@@ -1549,6 +1584,7 @@ function readImport(file) {
     fileName: path.basename(file),
     current: schedule.blocks.length,
     blocks: blocks.map((b) => {
+      if (b.type === OWN_TYPE) return { ...b, typeName: 'Own' };
       const t = types.get(b.type);
       return { ...b, typeName: t ? (t.isDefault ? typeOf(DEFAULT_TYPE).name : t.name) : typeOf(DEFAULT_TYPE).name };
     }),
@@ -1605,7 +1641,9 @@ function applyImport(token, { applySettings, rejectClips = [] }) {
   blockTypes = sanitizeTypes(blockTypes);
   writeJSON(FILES.blockTypes, blockTypes);
 
-  schedule = { blocks: p.blocks.map((b) => ({ ...b, type: typeIds.get(b.type) || DEFAULT_TYPE })) };
+  schedule = { blocks: p.blocks.map((b) => (b.type === OWN_TYPE
+    ? { ...b, reminders: fromFile(b.reminders, REMINDERS) } // copies in the clips its own reminders use
+    : { ...b, type: typeIds.get(b.type) || DEFAULT_TYPE })) };
   writeJSON(FILES.schedule, schedule);
 
   if (applySettings && p.settings) {
@@ -1622,16 +1660,23 @@ function applyImport(token, { applySettings, rejectClips = [] }) {
 // ---------------------------------------------------------------------------
 
 // Every block has a type: one that isn't in typeIds becomes the fallback (normally Default).
-function sanitizeBlocks(blocks, typeIds = new Set(blockTypes.map((t) => t.id)), fallback = DEFAULT_TYPE) {
+// No end (missing, null or empty) makes a moment. Type "own" keeps the block's own reminders
+// (and falls back too if it has none). isSound checks those reminders' sounds.
+function sanitizeBlocks(blocks, typeIds = new Set(blockTypes.map((t) => t.id)), fallback = DEFAULT_TYPE, isSound = validSound) {
   if (!Array.isArray(blocks)) throw new Error('Schedule must be a list.');
   return blocks.map((b, i) => {
     const title = String(b.title || '').trim().slice(0, 120);
     if (!title) throw new Error(`Block ${i + 1} needs a name.`);
-    if (!TIME_RE.test(b.start) || !TIME_RE.test(b.end)) throw new Error(`"${title}" has an invalid time.`);
-    if (toMin(b.end) <= toMin(b.start)) throw new Error(`"${title}" must end after it starts.`);
+    const end = b.end ? String(b.end) : '';
+    if (!TIME_RE.test(b.start) || (end && !TIME_RE.test(end))) throw new Error(`"${title}" has an invalid time.`);
+    if (end && toMin(end) <= toMin(b.start)) throw new Error(`"${title}" must end after it starts.`);
     const days = [...new Set((b.days || []).map(Number).filter((d) => d >= 0 && d <= 6))].sort();
-    const type = typeIds.has(String(b.type)) ? String(b.type) : fallback;
-    return { id: String(b.id || crypto.randomUUID()), title, start: b.start, end: b.end, days, type };
+    const out = { id: String(b.id || crypto.randomUUID()), title, start: b.start, end, days, type: typeIds.has(String(b.type)) ? String(b.type) : fallback };
+    if (b.type === OWN_TYPE && b.reminders && typeof b.reminders === 'object') {
+      out.type = OWN_TYPE;
+      out.reminders = sanitizeReminders(b.reminders, REMINDERS, isSound);
+    }
+    return out;
   }).sort((a, b) => toMin(a.start) - toMin(b.start));
 }
 
@@ -1654,12 +1699,12 @@ function registerIpc() {
   ipcMain.handle('get-today', () => ({
     // warnMin and prepMin (0 when that reminder is off) let the mini timer show the heads-up and "Get ready".
     blocks: blocksFor(new Date()).map((b) => {
-      const r = typeOf(b.type).reminders;
+      const r = remindersFor(b);
       return {
         ...b,
         start: b.start.toISOString(),
         end: b.end.toISOString(),
-        warnMin: r.warn.on ? r.warn.lead : 0,
+        warnMin: r.warn.on && !b.moment ? r.warn.lead : 0,
         prepMin: r.prep.on ? r.prep.lead : 0,
       };
     }),
@@ -1805,6 +1850,7 @@ function registerIpc() {
     writeJSON(FILES.blockTypes, blockTypes);
     // Blocks whose type was deleted move to Default.
     const ids = new Set(blockTypes.map((t) => t.id));
+    ids.add(OWN_TYPE); // blocks with their own reminders don't belong to a type
     if (schedule.blocks.some((b) => !ids.has(b.type))) {
       schedule = { blocks: schedule.blocks.map((b) => ({ ...b, type: ids.has(b.type) ? b.type : DEFAULT_TYPE })) };
       writeJSON(FILES.schedule, schedule);

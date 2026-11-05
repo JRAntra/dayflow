@@ -44,11 +44,12 @@ struct DialView: View {
                     ticks(r)
                     // Neighbouring arcs' rounded ends overlap, so finished and upcoming blocks are
                     // each drawn as one layer and faded together, like the Mac's opaque colours.
-                    arcs(blocks.filter { now >= $0.end }, r).opacity(0.22)
-                    arcs(blocks.filter { now < $0.start }, r).opacity(0.5)
+                    let spans = blocks.filter { !$0.block.isMoment }
+                    arcs(spans.filter { now >= $0.end }, r).opacity(0.22)
+                    arcs(spans.filter { now < $0.start }, r).opacity(0.5)
                     // A thin line where one block hands over to the next, so each reads on its own.
                     Path { p in
-                        for b in blocks where blocks.contains(where: { $0.end == b.start }) {
+                        for b in spans where spans.contains(where: { $0.end == b.start }) {
                             let a = angle(b.start, r)
                             p.move(to: Self.polar(Self.rBlock - 11, a))
                             p.addLine(to: Self.polar(Self.rBlock + 11, a))
@@ -56,7 +57,16 @@ struct DialView: View {
                     }
                     .stroke(Color(.systemBackground), style: StrokeStyle(lineWidth: 2.5, lineCap: .butt))
                     .opacity(drawn ? 1 : 0)
-                    ForEach(blocks.filter { $0.start <= now && now < $0.end }) { b in
+                    // Moments: a dot on the ring at their time.
+                    ForEach(blocks.filter(\.block.isMoment)) { m in
+                        Circle()
+                            .fill(now >= m.start ? Palette.accent.opacity(0.5) : Palette.accent)
+                            .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
+                            .frame(width: 12, height: 12)
+                            .position(Self.polar(Self.rBlock, angle(m.start, r)))
+                            .opacity(drawn ? 1 : 0)
+                    }
+                    ForEach(spans.filter { $0.start <= now && now < $0.end }) { b in
                         arc(b, r)
                             .stroke(Palette.accent, style: StrokeStyle(lineWidth: 28, lineCap: .round))
                             .shadow(color: Palette.accent.opacity(0.45), radius: 8)

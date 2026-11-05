@@ -100,6 +100,8 @@ Pick a block's type from the small dropdown under its name in the schedule; **Ne
 
 **Upgrading from an earlier version.** The first time the new version starts, it saves your old setup to `backups/`, then builds a Default type from your old global sounds and "warn me before a block ends" minutes, resolves any "Same as default" sounds in your other types, moves blocks without a type to Default, and gives Meetings your old meeting lead time and sound. Nothing you hear changes.
 
+A block can also be a **moment**, with only a start time (leave Ends empty): it gets just Start preparation and Start, shows as a dot on the dial, and is never merged with block reminders. And a block can have **Own reminders** (first in its Type menu) instead of a type's: **Reminders ▸** under the row shows them, editable, or the type's read-only. Export files are version 3 (`dayflowExport: 3`) because of these; versions 1 and 2 still import.
+
 ## Export and import your schedule
 
 **Schedule → Export…** saves a `.json` file with your blocks, the block types they use (all four reminders each), the Meetings reminders, volume, and any of your clips those reminders use (embedded, so the file works on another computer). It never includes your Google sign-in.

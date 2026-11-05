@@ -20,7 +20,8 @@ public final class DataStore {
     public internal(set) var settings = Settings()
     public internal(set) var clips: [CustomClip] = []
 
-    public static let exportVersion = 2
+    /// 3: blocks can be moments (no end) and can carry their own reminders.
+    public static let exportVersion = 3
     public static let maxImportBytes = 40 * 1024 * 1024
     public static let maxBackups = 10
 
@@ -50,7 +51,7 @@ public final class DataStore {
         types = (try? Sanitize.types(read(typesFile) ?? JSONValue.from(Specs.starterTypes()), isSound: isSound)) ?? Specs.starterTypes()
         settings = Sanitize.settings(read(settingsFile), isSound: isSound)
         let raw = read(scheduleFile)?["blocks"] ?? JSONValue.from(Specs.sampleSchedule())
-        blocks = (try? Sanitize.blocks(raw, typeIds: Set(types.map(\.id)))) ?? []
+        blocks = (try? Sanitize.blocks(raw, typeIds: Set(types.map(\.id)), isSound: isSound)) ?? []
     }
 
     public func isSound(_ id: String) -> Bool {
@@ -74,14 +75,14 @@ public final class DataStore {
     }
 
     public func saveBlocks(_ list: [Block]) throws {
-        blocks = try Sanitize.blocks(list, typeIds: Set(types.map(\.id)))
+        blocks = try Sanitize.blocks(list, typeIds: Set(types.map(\.id)), isSound: isSound)
         try write(scheduleFile, ["blocks": blocks])
     }
 
     /// Saves the type list; blocks whose type was deleted move to Default.
     public func saveTypes(_ list: [BlockType]) throws {
         let clean = try Sanitize.types(list, isSound: isSound)
-        let ids = Set(clean.map(\.id))
+        let ids = Set(clean.map(\.id)).union([Specs.ownType]) // own reminders don't belong to a type
         types = clean
         try write(typesFile, types)
         if blocks.contains(where: { !ids.contains($0.type) }) {
@@ -141,9 +142,18 @@ public final class DataStore {
             settings.meetings[key].sound = Specs.spec(key).sound
             reset.append("Meetings · \(Specs.spec(key).label)")
         }
+        var blocksChanged = false
+        for i in blocks.indices where blocks[i].reminders != nil {
+            for key in TypeReminderKey.allCases where blocks[i].reminders![key].sound == clip.soundId {
+                blocks[i].reminders![key].sound = Specs.spec(key).sound
+                reset.append("\(blocks[i].title) · \(Specs.spec(key).label)")
+                blocksChanged = true
+            }
+        }
         if !reset.isEmpty {
             try write(typesFile, types)
             try write(settingsFile, settings)
+            if blocksChanged { try write(scheduleFile, ["blocks": blocks]) }
         }
         return reset
     }
@@ -156,7 +166,8 @@ public final class DataStore {
     public func exportPayload(backup: Bool = false, now: Date = Date()) -> JSONValue {
         let usedTypes = Set(blocks.map(\.type))
         let list = types.filter { backup || usedTypes.contains($0.id) }
-        let usedSounds = Set(list.flatMap { $0.reminders.all.map(\.sound) } + settings.meetings.all.map(\.sound))
+        let usedSounds = Set(list.flatMap { $0.reminders.all.map(\.sound) } + settings.meetings.all.map(\.sound)
+            + blocks.flatMap { $0.reminders?.all.map(\.sound) ?? [] })
         var typeValues: [JSONValue] = []
         for t in list {
             var o = JSONValue.from(t).object ?? [:]

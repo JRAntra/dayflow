@@ -4,6 +4,8 @@ import Foundation
 // block-types.json, settings.json, sounds.json), so export files move between them unchanged.
 
 /// One block of your weekly plan. Times are "HH:mm" in local time; days are 0 (Sunday) to 6.
+/// A block with an empty `end` is a **moment**: it happens at its start time and doesn't last.
+/// A block whose `type` is "own" has its own `reminders` instead of a block type's.
 public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var title: String
@@ -11,10 +13,19 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var end: String
     public var days: [Int]
     public var type: String
+    /// The block's own reminders, when `type` is "own".
+    public var reminders: TypeReminders?
 
-    public init(id: String = Block.newId(), title: String, start: String, end: String, days: [Int], type: String) {
+    public init(id: String = Block.newId(), title: String, start: String, end: String, days: [Int], type: String,
+                reminders: TypeReminders? = nil) {
         self.id = id; self.title = title; self.start = start; self.end = end; self.days = days; self.type = type
+        self.reminders = reminders
     }
+
+    /// Only a start time: it happens at that moment.
+    public var isMoment: Bool { end.isEmpty }
+    /// Reminders set on the block itself rather than taken from a block type.
+    public var hasOwnReminders: Bool { type == Specs.ownType }
 
     /// Ids look like the Mac's: "b" + base-36 time + 4 random characters.
     public static func newId(now: Date = Date()) -> String {
@@ -25,7 +36,8 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     }
 
     public var startMin: Int { HHMM.minutes(start) ?? 0 }
-    public var endMin: Int { HHMM.minutes(end) ?? 0 }
+    /// A moment "ends" where it starts.
+    public var endMin: Int { isMoment ? startMin : (HHMM.minutes(end) ?? 0) }
     public var lengthMin: Int { endMin - startMin }
 }
 

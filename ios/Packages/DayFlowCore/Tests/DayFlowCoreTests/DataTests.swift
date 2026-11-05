@@ -155,7 +155,7 @@ let macExport = """
         #expect(throws: DataError("That file isn't a DayFlow export.")) { try s.readImport(Data("nope".utf8), fileName: "a") }
         #expect(throws: DataError("That file isn't a DayFlow export.")) { try s.readImport(Data(#"{"dayflowExport":"2"}"#.utf8), fileName: "a") }
         #expect(throws: DataError("That file was made by a newer version of DayFlow. Update DayFlow to import it.")) {
-            try s.readImport(Data(#"{"dayflowExport":3}"#.utf8), fileName: "a")
+            try s.readImport(Data(#"{"dayflowExport":4}"#.utf8), fileName: "a")
         }
         #expect(throws: DataError("The schedule in that file has a problem: Schedule must be a list.")) {
             try s.readImport(Data(#"{"dayflowExport":2}"#.utf8), fileName: "a")

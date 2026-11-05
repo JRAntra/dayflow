@@ -134,9 +134,19 @@ extension DataStore {
             problems.append("A sound clip is missing from the file, so \(missing.joined(separator: ", ")) will use the starting sound.")
         }
 
+        // A block's own reminders: their sounds are checked against the file's clips too.
+        var scheduleValue = schedule?["blocks"]
+        if let list = scheduleValue?.array {
+            scheduleValue = .array(list.map { b in
+                guard b["type"]?.stringValue == Specs.ownType, b["reminders"]?.object != nil, var o = b.object else { return b }
+                let title = b["title"]?.stringValue ?? "A block"
+                o["reminders"] = withSounds(b["reminders"], TypeReminderKey.allCases, Specs.spec, title)
+                return .object(o)
+            })
+        }
         let blocks: [Block]
         do {
-            blocks = try Sanitize.blocks(schedule?["blocks"], typeIds: Set(fileTypes.map(\.id)), fallback: fileDefault ?? Specs.defaultType)
+            blocks = try Sanitize.blocks(scheduleValue, typeIds: Set(fileTypes.map(\.id)), fallback: fileDefault ?? Specs.defaultType)
         } catch {
             throw DataError("The schedule in that file has a problem: \((error as? DataError)?.message ?? error.localizedDescription)")
         }
@@ -147,6 +157,7 @@ extension DataStore {
             fileName: fileName,
             current: self.blocks.count,
             blocks: blocks.map { b in
+                if b.hasOwnReminders { return .init(block: b, typeName: Specs.ownTypeName) }
                 let t = fileTypes.first { $0.id == b.type }
                 return .init(block: b, typeName: t.map { $0.isDefault ? defaultName : $0.name } ?? defaultName)
             },
@@ -219,7 +230,15 @@ extension DataStore {
         types = try Sanitize.types(list, isSound: isSound)
         try write(typesFile, types)
 
-        try saveBlocks(p.rawBlocks.map { b in var c = b; c.type = typeIds[b.type] ?? Specs.defaultType; return c })
+        try saveBlocks(p.rawBlocks.map { b in
+            var c = b
+            if b.hasOwnReminders, let r = b.reminders {
+                c.reminders = try typeFromFile(r) // copies in the clips its own reminders use
+            } else {
+                c.type = typeIds[b.type] ?? Specs.defaultType
+            }
+            return c
+        })
 
         if applySettings, let s = p.incoming {
             var next = settings

@@ -67,28 +67,39 @@ public enum Sanitize {
         list.filter(\.isDefault) + list.filter { !$0.isDefault }
     }
 
-    /// Every block needs a name, valid times that end after they start, and a type that exists;
-    /// an unknown type becomes `fallback`. Days are cleaned and sorted, blocks are sorted by start.
-    public static func blocks(_ v: JSONValue?, typeIds: Set<String>, fallback: String = Specs.defaultType) throws -> [Block] {
+    /// Every block needs a name, a valid start, an end after it (or no end, for a moment) and a
+    /// type that exists; an unknown type becomes `fallback`. A block with type "own" keeps its own
+    /// reminders (it falls back too if it has none). Days are cleaned and sorted, blocks sorted by start.
+    public static func blocks(_ v: JSONValue?, typeIds: Set<String>, fallback: String = Specs.defaultType,
+                              isSound: (String) -> Bool = { _ in true }) throws -> [Block] {
         guard let list = v?.array else { throw DataError("Schedule must be a list.") }
         var out: [Block] = []
         for (i, b) in list.enumerated() {
             let title = String((b["title"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
             if title.isEmpty { throw DataError("Block \(i + 1) needs a name.") }
-            guard let start = b["start"]?.string, let end = b["end"]?.string,
-                  let s = HHMM.minutes(start), let e = HHMM.minutes(end) else { throw DataError("\"\(title)\" has an invalid time.") }
-            if e <= s { throw DataError("\"\(title)\" must end after it starts.") }
+            guard let start = b["start"]?.string, let s = HHMM.minutes(start) else { throw DataError("\"\(title)\" has an invalid time.") }
+            // No end (missing, null or empty) makes a moment.
+            let rawEnd = b["end"]?.string ?? ""
+            if !rawEnd.isEmpty {
+                guard let e = HHMM.minutes(rawEnd) else { throw DataError("\"\(title)\" has an invalid time.") }
+                if e <= s { throw DataError("\"\(title)\" must end after it starts.") }
+            }
             let days = Array(Set((b["days"]?.array ?? []).compactMap { $0.numberValue }
                 .filter { $0 == $0.rounded() && $0 >= 0 && $0 <= 6 }.map { Int($0) })).sorted()
-            let type = b["type"]?.stringValue.flatMap { typeIds.contains($0) ? $0 : nil } ?? fallback
+            var type = b["type"]?.stringValue.flatMap { typeIds.contains($0) ? $0 : nil } ?? fallback
+            var own: TypeReminders?
+            if b["type"]?.stringValue == Specs.ownType, let r = b["reminders"], r.object != nil {
+                type = Specs.ownType
+                own = typeReminders(r, isSound: isSound)
+            }
             let id = b["id"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString.lowercased()
-            out.append(Block(id: id, title: title, start: start, end: end, days: days, type: type))
+            out.append(Block(id: id, title: title, start: start, end: rawEnd, days: days, type: type, reminders: own))
         }
         return sortByStart(out)
     }
 
-    public static func blocks(_ list: [Block], typeIds: Set<String>) throws -> [Block] {
-        try blocks(JSONValue.from(list), typeIds: typeIds)
+    public static func blocks(_ list: [Block], typeIds: Set<String>, isSound: (String) -> Bool = { _ in true }) throws -> [Block] {
+        try blocks(JSONValue.from(list), typeIds: typeIds, isSound: isSound)
     }
 
     /// Stable sort by start time, like Array.prototype.sort in JavaScript.
