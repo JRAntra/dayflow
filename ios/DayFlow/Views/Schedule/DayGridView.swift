@@ -46,10 +46,17 @@ struct DayGridView: View {
                         if isToday {
                             NowLine().padding(.leading, Self.labelWidth - 4).zIndex(3)
                         }
-                        ForEach(dayBlocks) { b in
+                        ForEach(dayBlocks.filter(\.isMoment)) { m in
+                            MomentMark(block: m, typeName: model.typeName(for: m), width: width,
+                                       onTap: { edit(BlockEditing(block: m, original: m, day: day)) },
+                                       onCommit: { commit($0, original: m) })
+                                .padding(.leading, Self.labelWidth)
+                                .zIndex(1.5)
+                        }
+                        ForEach(dayBlocks.filter { !$0.isMoment }) { b in
                             let col = columns[b.id] ?? (0, 1)
                             let colWidth = width / CGFloat(col.of)
-                            GridBlock(block: b, typeName: model.typeOf(b.type).name, selected: selected == b.id,
+                            GridBlock(block: b, typeName: model.typeName(for: b), selected: selected == b.id,
                                       width: colWidth - 3,
                                       onSelect: { withAnimation(.snappy) { selected = b.id } },
                                       onTap: { edit(BlockEditing(block: b, original: b, day: day)) },
@@ -138,6 +145,59 @@ struct NowLine: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// A moment in the grid: a thin line with its name at its time. Hold and drag to move it; it
+/// has no length to resize. Tap to edit it.
+struct MomentMark: View {
+    let block: Block
+    let typeName: String
+    let width: CGFloat
+    let onTap: () -> Void
+    let onCommit: (Block) -> Void
+
+    @GestureState private var dy: CGFloat?
+    @State private var held = false
+
+    func minutes(_ dy: CGFloat) -> Int { ScheduleEdits.snap(Int((dy / DayGridView.perMinute).rounded())) }
+    var preview: Block { dy.map { ScheduleEdits.moved(block, by: minutes($0)) } ?? block }
+
+    var body: some View {
+        let b = preview
+        HStack(spacing: 6) {
+            Rectangle().fill(Palette.accent).frame(width: 9, height: 9).rotationEffect(.degrees(45))
+            Text(b.title).font(.caption.weight(.semibold)).lineLimit(1)
+            Text(dy != nil ? BlockRow.time(b.startMin) : typeName)
+                .font(.caption2).foregroundStyle(dy != nil ? Palette.accent : .secondary).monospacedDigit()
+            Rectangle().fill(Palette.accent.opacity(0.6)).frame(height: 1.5)
+        }
+        .padding(.horizontal, 4)
+        .frame(width: width, height: 18, alignment: .leading)
+        .background(Color(.systemBackground).opacity(0.85), in: .capsule)
+        .contentShape(.rect)
+        .shadow(color: .black.opacity(dy != nil ? 0.18 : 0), radius: 6, y: 3)
+        .gesture(
+            LongPressGesture(minimumDuration: 0.3)
+                .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+                .updating($dy) { v, state, _ in if case .second(true, let d?) = v { state = d.translation.height } }
+                .onChanged { v in if case .second(true, _) = v { held = true } }
+                .onEnded { v in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { held = false }
+                    if case .second(true, let d?) = v { onCommit(ScheduleEdits.moved(block, by: minutes(d.translation.height))) }
+                }
+        )
+        .simultaneousGesture(TapGesture().onEnded { if held { held = false } else { onTap() } })
+        .sensoryFeedback(.selection, trigger: dy.map(minutes))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(block.title), a moment at \(BlockRow.time(block.startMin)), \(typeName)")
+        .accessibilityHint("Double-tap to edit. Swipe up or down for actions to move it.")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onTap() }
+        .accessibilityAction(named: "Move 5 minutes earlier") { onCommit(ScheduleEdits.moved(block, by: -5)) }
+        .accessibilityAction(named: "Move 5 minutes later") { onCommit(ScheduleEdits.moved(block, by: 5)) }
+        // Centred on its time.
+        .padding(.top, max(0, CGFloat(b.startMin) * DayGridView.perMinute - 9))
     }
 }
 

@@ -51,7 +51,7 @@ struct ImportPreviewSheet: View {
                     ForEach(Array(preview.blocks.enumerated()), id: \.offset) { _, p in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(p.block.title).font(.body.weight(.medium))
-                            Text("\(BlockRow.time(p.block.startMin)) – \(BlockRow.time(p.block.endMin)) · \(ScheduleEdits.daysText(p.block.days)) · \(p.typeName)")
+                            Text("\(p.block.isMoment ? "\(BlockRow.time(p.block.startMin)), a moment" : "\(BlockRow.time(p.block.startMin)) – \(BlockRow.time(p.block.endMin))") · \(ScheduleEdits.daysText(p.block.days)) · \(p.typeName)")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }

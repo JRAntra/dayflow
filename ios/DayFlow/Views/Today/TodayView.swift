@@ -75,7 +75,7 @@ struct NowReadout: View {
                 Button("Plan your day") { model.tab = .schedule }
                     .buttonStyle(.borderedProminent).controlSize(.small).padding(.top, 4)
             } else if let current {
-                TypeBadge(name: model.typeOf(current.type).name)
+                TypeBadge(name: model.typeName(for: current.block))
                 Text(current.title).font(.headline).multilineTextAlignment(.center).lineLimit(2)
                 countdown(current.end.timeIntervalSince(now))
                 let after = blocks.first { $0.start >= current.end }
@@ -164,6 +164,7 @@ struct DayTimeline: View {
         var end: Date { switch self { case .block(let b): b.end; case .meeting(let m): m.end } }
         var title: String { switch self { case .block(let b): b.title; case .meeting(let m): m.title } }
         var isMeeting: Bool { if case .meeting = self { return true }; return false }
+        var isMoment: Bool { if case .block(let b) = self { return b.block.isMoment }; return false }
     }
 
     var items: [Item] {
@@ -206,7 +207,9 @@ struct DayTimeline: View {
                 .frame(width: 72, alignment: .trailing)
                 .monospacedDigit()
             Group {
-                if i.isMeeting { RoundedRectangle(cornerRadius: 3).fill(tint) } else { Circle().fill(tint) }
+                if i.isMeeting { RoundedRectangle(cornerRadius: 3).fill(tint) }
+                else if i.isMoment { Rectangle().fill(tint).rotationEffect(.degrees(45)).scaleEffect(0.8) } // a diamond
+                else { Circle().fill(tint) }
             }
             .frame(width: current ? 12 : 9, height: current ? 12 : 9)
             .overlay { if current { Circle().stroke(tint.opacity(0.25), lineWidth: 6) } }
@@ -215,10 +218,11 @@ struct DayTimeline: View {
                 Text(i.title).font(.body.weight(current ? .semibold : .regular))
                 HStack(spacing: 6) {
                     switch i {
-                    case .block(let b): Text(model.typeOf(b.type).name)
+                    case .block(let b): Text(model.typeName(for: b.block))
                     case .meeting: Text("Meeting")
                     }
-                    Text("· until \(i.end.timeText)")
+                    // A moment happens at its time; blocks and meetings last until their end.
+                    Text(i.isMoment ? "· at \(i.start.timeText)" : "· until \(i.end.timeText)")
                 }
                 .font(.caption).foregroundStyle(.secondary)
             }

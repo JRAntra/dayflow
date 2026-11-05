@@ -122,6 +122,8 @@ final class AppModel {
     }
 
     func typeOf(_ id: String) -> BlockType { store.typeOf(id) }
+    /// "Focus", or "Own" for a block with its own reminders.
+    func typeName(for b: Block) -> String { b.hasOwnReminders ? Specs.ownTypeName : typeOf(b.type).name }
     func soundName(_ id: String) -> String { Specs.soundName(id, clips: clips) }
 
     private func sync() {

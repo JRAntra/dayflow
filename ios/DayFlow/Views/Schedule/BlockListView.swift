@@ -44,7 +44,7 @@ struct BlockRow: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(start).font(.subheadline.weight(.semibold))
-                Text(end).font(.caption).foregroundStyle(.secondary)
+                if !block.isMoment { Text(end).font(.caption).foregroundStyle(.secondary) }
             }
             .monospacedDigit()
             .frame(width: 74, alignment: .trailing)
@@ -52,8 +52,8 @@ struct BlockRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(block.title).font(.body.weight(.medium))
                 HStack(spacing: 6) {
-                    TypeBadge(name: model.typeOf(block.type).name)
-                    Text("\(ScheduleEdits.daysText(block.days)) · \(TimeText.length(minutes: block.lengthMin))")
+                    TypeBadge(name: model.typeName(for: block))
+                    Text("\(ScheduleEdits.daysText(block.days)) · \(block.isMoment ? "Moment" : TimeText.length(minutes: block.lengthMin))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let overlap = ScheduleEdits.overlapText(block, in: model.blocks) {

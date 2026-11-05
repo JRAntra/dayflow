@@ -194,6 +194,8 @@ struct ReminderSection: View {
     let spec: Specs.ReminderSpec
     var example: String? = nil
     @Binding var reminder: Reminder
+    /// Shows the settings without letting them change (a block using its type's reminders).
+    var readOnly = false
 
     var body: some View {
         Section {
@@ -203,16 +205,25 @@ struct ReminderSection: View {
                     if let example { Text(example).font(.caption).foregroundStyle(.secondary) }
                 }
             }
+            .disabled(readOnly)
             if reminder.on {
                 if spec.hasLead {
-                    Stepper(value: Binding(get: { reminder.lead ?? Specs.defaultLead }, set: { reminder.lead = $0 }), in: 1...60) {
+                    if readOnly {
                         LabeledContent("Minutes ahead", value: "\(reminder.lead ?? Specs.defaultLead) min")
+                    } else {
+                        Stepper(value: Binding(get: { reminder.lead ?? Specs.defaultLead }, set: { reminder.lead = $0 }), in: 1...60) {
+                            LabeledContent("Minutes ahead", value: "\(reminder.lead ?? Specs.defaultLead) min")
+                        }
                     }
                 }
-                NavigationLink {
-                    SoundPickerView(title: spec.label, sound: $reminder.sound, fade: reminder.fade, fallback: spec.sound)
-                } label: {
+                if readOnly {
                     LabeledContent("Sound", value: model.soundName(reminder.sound))
+                } else {
+                    NavigationLink {
+                        SoundPickerView(title: spec.label, sound: $reminder.sound, fade: reminder.fade, fallback: spec.sound)
+                    } label: {
+                        LabeledContent("Sound", value: model.soundName(reminder.sound))
+                    }
                 }
                 Toggle(isOn: $reminder.fade) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -220,6 +231,7 @@ struct ReminderSection: View {
                         Text("Starts quiet and grows to your volume").font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                .disabled(readOnly)
                 Button {
                     model.preview(reminder.sound, fade: reminder.fade, fallback: spec.sound)
                 } label: {

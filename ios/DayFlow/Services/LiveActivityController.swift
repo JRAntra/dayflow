@@ -39,7 +39,7 @@ enum LiveActivityController {
         let blocks = planner.blocksFor(now)
         guard let cur = blocks.first(where: { $0.start <= now && now < $0.end }) else { return nil }
         let next = blocks.first { $0.start >= cur.end }
-        return .init(title: cur.title, typeName: planner.typeOf(cur.type).name, start: cur.start, end: cur.end,
+        return .init(title: cur.title, typeName: planner.typeName(for: cur.block), start: cur.start, end: cur.end,
                      nextTitle: next?.title, nextStart: next?.start)
     }
 
@@ -54,7 +54,7 @@ enum LiveActivityController {
         let cal = planner.calendar
         let days = (0..<3).compactMap { cal.date(byAdding: .day, value: $0, to: cal.startOfDay(for: now)) }
         let items = days.flatMap { planner.blocksFor($0) }.map {
-            WidgetSnapshot.Item(title: $0.title, typeName: planner.typeOf($0.type).name, start: $0.start, end: $0.end)
+            WidgetSnapshot.Item(title: $0.title, typeName: planner.typeName(for: $0.block), start: $0.start, end: $0.end)
         }
         let ok = WidgetSnapshot(items: items, written: now, offUntil: offUntil).write()
         if ok { WidgetCenter.shared.reloadAllTimelines() }

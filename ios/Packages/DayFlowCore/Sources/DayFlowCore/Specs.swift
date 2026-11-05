@@ -3,6 +3,9 @@ import Foundation
 /// The starting values and fixed lists, the same as the Mac app's.
 public enum Specs {
     public static let defaultType = "default"
+    /// The type of a block with its own reminders (Own reminders in the Type menu).
+    public static let ownType = "own"
+    public static let ownTypeName = "Own"
     public static let defaultLead = 5
 
     /// The built-in sounds, in menu order. The files are assets/sounds/<id>.mp3 in the repo.

@@ -164,7 +164,12 @@ function renderDial(now) {
         }
       }
       const gap = 3.2; // degrees between neighbouring arcs, so rounded ends don't touch
-      for (const b of state.today.blocks) {
+      // Moments: a dot on the ring at their time.
+      for (const mo of state.today.blocks.filter((b) => b.moment)) {
+        const [x, y] = polar(R_BLOCK, angle(mo.start));
+        parts.push(`<circle class="dial-moment" data-start="${+mo.start}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="6"><title>${esc(mo.title)}, at ${fmt(mo.start)}</title></circle>`);
+      }
+      for (const b of state.today.blocks.filter((x) => !x.moment)) {
         const a0 = angle(b.start) + gap / 2;
         const a1 = Math.max(angle(b.end) - gap / 2, a0 + 0.5);
         parts.push(`<path class="dial-block" pathLength="1" stroke-width="20" data-start="${+b.start}" data-end="${+b.end}" d="${arc(R_BLOCK, a0, a1)}"><title>${esc(b.title)}, ${fmt(b.start)} to ${fmt(b.end)}</title></path>`);
@@ -188,6 +193,7 @@ function renderDial(now) {
   }
   if (!range) return;
 
+  svg.querySelectorAll('.dial-moment').forEach((c) => c.classList.toggle('past', now >= Number(c.dataset.start)));
   svg.querySelectorAll('.dial-block').forEach((p) => {
     const s = Number(p.dataset.start);
     const e = Number(p.dataset.end);
@@ -292,12 +298,13 @@ function renderAgenda() {
       const join = i.kind === 'meeting' && i.url && now < i.end
         ? `<button class="btn small" data-join="${idx}">Join</button>` : '';
       const label = i.kind === 'meeting' ? 'Meeting' : typeName(i.type);
-      return `<li class="tl-item ${i.kind} ${status}">
+      const moment = i.kind === 'block' && i.moment;
+      return `<li class="tl-item ${i.kind}${moment ? ' moment' : ''} ${status}">
         <span class="tl-time">${fmt(i.start)}</span>
         <span class="tl-dot" aria-hidden="true"></span>
         <div class="tl-body">
           <span class="tl-what"><span class="tl-title">${esc(i.title)}</span><span class="tl-sub">${esc(label)}</span></span>
-          <span class="tl-range">until ${fmt(i.end)}</span>
+          <span class="tl-range">${moment ? `at ${fmt(i.start)}` : `until ${fmt(i.end)}`}</span>
           ${join}
         </div>
       </li>`;
@@ -341,11 +348,13 @@ function setSaveText(msg, err = false) {
 }
 const setSchedStatus = (msg, err = false) => toast(msg, err);
 
+// A block with no end is a moment: it happens at its start time. Moments never overlap anything.
 function rowProblems(b, i) {
   if (!b.title.trim()) return 'Give this block a name.';
-  if (!b.start || !b.end) return 'Set a start and end time.';
-  if (toMin(b.end) <= toMin(b.start)) return 'End time must be after the start time.';
+  if (!b.start) return 'Set a start time.';
+  if (b.end && toMin(b.end) <= toMin(b.start)) return 'End time must be after the start time.';
   if (!b.days.length) return 'Pick at least one day, or this block never runs.';
+  if (!b.end) return '';
   const clash = state.draft.find((o, j) => j !== i && o.start && o.end &&
     o.days.some((d) => b.days.includes(d)) &&
     toMin(o.start) < toMin(b.end) && toMin(b.start) < toMin(o.end));
@@ -354,6 +363,7 @@ function rowProblems(b, i) {
 }
 
 function durationText(b) {
+  if (b.start && !b.end) return 'Moment';
   if (!b.start || !b.end || toMin(b.end) <= toMin(b.start)) return '';
   const d = toMin(b.end) - toMin(b.start);
   const h = Math.floor(d / 60);
@@ -369,26 +379,44 @@ function renderEditor({ enter = null } = {}) {
     li.className = `block-row${b.id === enter ? ' enter' : ''}`;
     li.innerHTML = `
       <input type="time" aria-label="Start time" value="${esc(b.start)}" data-f="start">
-      <input type="time" aria-label="End time" value="${esc(b.end)}" data-f="end">
+      <span class="end-cell"><input type="time" aria-label="End time (empty for a moment)" value="${esc(b.end)}" data-f="end">
+        <button type="button" class="clear-end" aria-label="No end: make it a moment" title="No end: make it a moment">×</button></span>
       <div class="name-cell">
         <input type="text" aria-label="Block name" placeholder="What happens in this block?" value="${esc(b.title)}" data-f="title">
         <div class="meta">
           <label class="type-pick"><span class="dot" aria-hidden="true"></span><select class="type-select" aria-label="Block type"></select></label>
           <span class="dur"></span>
+          <button type="button" class="rems-toggle" aria-expanded="false">Reminders ▸</button>
         </div>
       </div>
       <span class="days" role="group" aria-label="Repeats on">
         ${DAY_LETTERS.map((l, d) => `<button class="day" aria-label="${DAY_NAMES[d]}" aria-pressed="${b.days.includes(d)}" data-day="${d}">${l}</button>`).join('')}
       </span>
       <button class="remove" aria-label="Remove block">×</button>
-      <span class="note"></span>`;
+      <span class="note"></span>
+      <div class="block-rems" hidden></div>`;
 
-    li.querySelectorAll('input').forEach((inp) => {
+    li.querySelectorAll('input[data-f]').forEach((inp) => {
       inp.addEventListener('input', () => {
+        const wasMoment = !b.end;
         b[inp.dataset.f] = inp.value;
         setDirty(true);
         refreshNotes();
+        if (inp.dataset.f === 'end' && wasMoment !== !b.end) renderBlockRems(li, b); // the reminder rows change
       });
+    });
+    // × clears the end: the block becomes a moment.
+    li.querySelector('.clear-end').addEventListener('click', () => {
+      b.end = '';
+      li.querySelector('input[data-f="end"]').value = '';
+      setDirty(true);
+      refreshNotes();
+      renderBlockRems(li, b);
+    });
+    // Reminders ▸ shows this block's reminders: its type's (read-only) or its own.
+    li.querySelector('.rems-toggle').addEventListener('click', () => {
+      if (openRems.has(b.id)) openRems.delete(b.id); else openRems.add(b.id);
+      renderBlockRems(li, b);
     });
     li.querySelectorAll('.day').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -409,9 +437,27 @@ function renderEditor({ enter = null } = {}) {
         $('add-type').focus();
         return;
       }
-      b.type = typeSel.value;
+      if (typeSel.value === OWN_TYPE) {
+        // Own reminders start as a copy of the type's.
+        b.reminders = structuredClone(state.blockTypes.find((t) => t.id === b.type)?.reminders || state.blockTypes[0].reminders);
+        b.type = OWN_TYPE;
+        openRems.add(b.id);
+      } else if (b.type === OWN_TYPE) {
+        const name = typeName(typeSel.value);
+        if (!window.confirm(`Use ${name}'s reminders instead? This block's own reminder settings are removed.`)) {
+          fillTypeSelect(typeSel, b.type);
+          return;
+        }
+        b.type = typeSel.value;
+        delete b.reminders;
+      } else {
+        b.type = typeSel.value;
+      }
       setDirty(true);
+      refreshNotes();
+      renderBlockRems(li, b);
     });
+    renderBlockRems(li, b);
     // The row shrinks away before it's removed.
     li.querySelector('.remove').addEventListener('click', () => {
       const go = () => {
@@ -428,21 +474,59 @@ function renderEditor({ enter = null } = {}) {
   refreshNotes();
 }
 
-// Block types: each block's dropdown lists your types, then "New type…".
+// Block types: each block's dropdown starts with Own reminders, then your types, then "New type…".
 const NEW_TYPE = '__new';
 const DEFAULT_TYPE = 'default'; // can be renamed, never deleted
-const typeName = (id) => state.blockTypes.find((t) => t.id === id)?.name || '';
+const OWN_TYPE = 'own'; // a block with its own reminders
+const typeName = (id) => (id === OWN_TYPE ? 'Own' : state.blockTypes.find((t) => t.id === id)?.name || '');
 function fillTypeSelect(sel, value) {
-  sel.innerHTML = state.blockTypes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')
+  sel.innerHTML = `<option value="${OWN_TYPE}">Own reminders</option><option disabled>──────</option>`
+    + state.blockTypes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')
     + '<option disabled>──────</option>'
     + `<option value="${NEW_TYPE}">New type…</option>`;
-  sel.value = state.blockTypes.some((t) => t.id === value) ? value : DEFAULT_TYPE;
+  sel.value = value === OWN_TYPE || state.blockTypes.some((t) => t.id === value) ? value : DEFAULT_TYPE;
+}
+
+// The block's reminder rows under Reminders ▸. With a type they show its settings, read-only;
+// with Own reminders they're editable and go into the draft (saved with Save schedule).
+// A moment has only Start preparation and Start.
+const openRems = new Set();
+function renderBlockRems(li, b) {
+  const box = li.querySelector('.block-rems');
+  const toggle = li.querySelector('.rems-toggle');
+  const open = openRems.has(b.id);
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.textContent = open ? 'Reminders ▾' : 'Reminders ▸';
+  box.hidden = !open;
+  if (!open) return;
+  const own = b.type === OWN_TYPE;
+  const spec = b.end ? TYPE_REMINDERS : TYPE_REMINDERS.filter((r) => r.key === 'prep' || r.key === 'start');
+  const type = state.blockTypes.find((t) => t.id === b.type) || state.blockTypes[0];
+  const reminders = own ? b.reminders : type.reminders;
+  box.innerHTML = `<p class="rems-note muted">${own ? 'Set just for this block.' : `From the ${esc(type.name)} type. Change it in Settings → Block types, or choose Own reminders.`}</p>`
+    + reminderRowsHtml(spec, b.title || 'This block');
+  box.classList.toggle('read-only', !own);
+  fillReminderRows(box, reminders);
+  if (own) {
+    wireReminderRows(box, spec, () => {
+      b.reminders = { ...b.reminders, ...readReminderRows(box, spec) }; // a moment keeps its hidden Heads-up and Time's up
+      setDirty(true);
+    });
+  } else {
+    // Read-only, but ▶ still plays.
+    box.querySelectorAll('input, select, .rem-fade, .step-down, .step-up').forEach((el) => { el.disabled = true; });
+    box.querySelectorAll('.rem-play').forEach((btn) => {
+      const row = btn.closest('.rem-row');
+      btn.addEventListener('click', () => play(row.querySelector('.rem-sound').value, null, $('set-volume').value,
+        { fade: row.querySelector('.rem-fade').getAttribute('aria-pressed') === 'true' }));
+    });
+  }
 }
 // Keeps the dropdowns current when types change while the schedule has unsaved edits.
 function refreshEditorTypes() {
   [...$('block-list').children].forEach((li, i) => {
     const b = state.draft[i];
-    if (b && !state.blockTypes.some((t) => t.id === b.type)) b.type = DEFAULT_TYPE;
+    if (b && b.type !== OWN_TYPE && !state.blockTypes.some((t) => t.id === b.type)) b.type = DEFAULT_TYPE;
     if (b) fillTypeSelect(li.querySelector('.type-select'), b.type);
   });
 }
@@ -461,12 +545,15 @@ function refreshNotes() {
 }
 
 $('add-block').addEventListener('click', () => {
-  const last = [...state.draft].sort((a, b) => toMin(a.end || '00:00') - toMin(b.end || '00:00')).pop();
-  const start = last?.end || '09:00';
+  // After a moment, the new block starts at the moment's time.
+  const endOf = (x) => x.end || x.start || '00:00';
+  const last = [...state.draft].sort((a, b) => toMin(endOf(a)) - toMin(endOf(b))).pop();
+  const start = last ? endOf(last) : '09:00';
   const endMin = Math.min(toMin(start) + 30, 23 * 60 + 59);
   const end = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
   const id = newId();
-  state.draft.push({ id, title: '', start, end, days: last ? [...last.days] : [1, 2, 3, 4, 5], type: last?.type || DEFAULT_TYPE });
+  state.draft.push({ id, title: '', start, end, days: last ? [...last.days] : [1, 2, 3, 4, 5], type: last?.type || DEFAULT_TYPE,
+    ...(last?.type === OWN_TYPE && last.reminders ? { reminders: structuredClone(last.reminders) } : {}) });
   setDirty(true);
   renderEditor({ enter: id });
   const row = $('block-list').lastElementChild;
