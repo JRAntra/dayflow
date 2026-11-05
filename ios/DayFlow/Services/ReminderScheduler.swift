@@ -8,7 +8,8 @@ import UserNotifications
 /// due. Instead the next reminders are scheduled ahead of time: up to 62 of them (iOS keeps at
 /// most 64 per app), then a quiet notice asking you to open DayFlow. Whenever the app runs, the
 /// list is refilled. Each one plays its sound at your ringer volume and follows the silent
-/// switch and Focus.
+/// switch and Focus, except the reminders of blocks that ring even on silent: those are set as
+/// alarms by AlarmScheduler, and only fall back to notifications when alarms aren't allowed.
 enum ReminderScheduler {
     static let joinCategory = "meeting-join"
     static let calendarCategory = "meeting-calendar"
@@ -33,24 +34,34 @@ enum ReminderScheduler {
     static func reschedule(planner: Planner, store: DataStore, now: Date = Date()) async -> Int {
         let center = UNUserNotificationCenter.current()
         let s = store.settings
-        // While reminders are off, nothing is scheduled (or, for 1 or 24 hours, nothing before then).
-        let window = planner.window(from: now, pausedUntil: s.offUntil(at: now), sound: s.sound)
+        // While reminders are off, nothing is scheduled (or, for 1 or 24 hours, nothing before then),
+        // alarms included.
+        let window = planner.window(from: now, pausedUntil: s.offUntil(at: now), sound: s.sound,
+                                    alarms: AlarmScheduler.access == .authorized)
+
+        var soundFiles = Set<String>()
+        func soundFile(_ ev: PlannedReminder) -> String? {
+            guard let sound = ev.sound else { return nil }
+            let name = SoundLibrary.prepare(sound, fade: ev.fade, volume: s.volume, store: store)
+                ?? ev.fallbackSound.flatMap { SoundLibrary.prepare($0, fade: ev.fade, volume: s.volume, store: store) }
+            if let name { soundFiles.insert(name) }
+            return name
+        }
+
+        // Alarms first; any iOS won't take become normal reminders.
+        let alarms = window.reminders.filter(\.alarm).map { ($0, soundFile($0)) }
+        let failed = Set(await AlarmScheduler.sync(alarms).map(\.id))
+        let notifications = window.all.filter { !$0.alarm || failed.contains($0.id) }
 
         var requests: [UNNotificationRequest] = []
-        var soundFiles = Set<String>()
-        for ev in window.all {
+        for ev in notifications {
             let content = UNMutableNotificationContent()
             content.title = ev.title
             content.body = ev.body
             content.threadIdentifier = ev.day
             content.interruptionLevel = .active
-            if let sound = ev.sound {
-                let name = SoundLibrary.prepare(sound, fade: ev.fade, volume: s.volume, store: store)
-                    ?? ev.fallbackSound.flatMap { SoundLibrary.prepare($0, fade: ev.fade, volume: s.volume, store: store) }
-                if let name {
-                    content.sound = UNNotificationSound(named: UNNotificationSoundName(name))
-                    soundFiles.insert(name)
-                }
+            if let name = soundFile(ev) {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(name))
             }
             var info: [String: Any] = ["role": ev.role.rawValue, "at": ev.at.timeIntervalSinceReferenceDate]
             if let blockId = ev.blockId { info["blockId"] = blockId }

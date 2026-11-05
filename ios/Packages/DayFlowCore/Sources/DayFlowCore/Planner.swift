@@ -32,6 +32,8 @@ public struct PlannedReminder: Hashable, Identifiable, Sendable {
     public var meeting: Meeting?
     /// The calendar day it belongs to, e.g. "2026-11-4"; notifications are grouped by it.
     public var day: String
+    /// Rings as an alarm, through the silent switch and Focus, because its block rings even on silent.
+    public var alarm: Bool = false
 
     public var id: String { keys[0] }
     /// The sound to fall back on if this reminder's clip can't be used.
@@ -74,6 +76,8 @@ public struct Planner: Sendable {
     /// Test notification always has room, and one for the notice.
     public static let windowLimit = 62
     public static let horizonDays = 14
+    /// At most this many alarms are set at once; any after them are normal reminders.
+    public static let alarmLimit = 48
 
     public func typeOf(_ id: String) -> BlockType {
         types.first { $0.id == id } ?? types.first { $0.isDefault } ?? BlockType(id: Specs.defaultType, name: "Default")
@@ -134,7 +138,7 @@ public struct Planner: Sendable {
             func key(_ role: String) -> String { "\(day)|block|\(b.block.id)|\(role)" }
             func make(_ role: ReminderRole, _ at: Date, _ rem: Reminder, _ title: String, _ body: String) -> PlannedReminder {
                 PlannedReminder(keys: [key(role.rawValue)], at: at, role: role, blockId: b.block.id, title: title, body: body,
-                                sound: rem.sound, fade: rem.fade, meeting: nil, day: day)
+                                sound: rem.sound, fade: rem.fade, meeting: nil, day: day, alarm: b.block.ringsOnSilent)
             }
 
             let prepLead = r.prep.lead ?? Specs.defaultLead
@@ -172,13 +176,14 @@ public struct Planner: Sendable {
             if r.prep.on && prepAt >= midnight {
                 merged.append(PlannedReminder(keys: [key("prep")], at: prepAt, role: .prep, blockId: m.block.id,
                                               title: "In \(lead) min: \(m.title)", body: "Get ready. It's at \(time(m.start)).",
-                                              sound: r.prep.sound, fade: r.prep.fade, meeting: nil, day: day))
+                                              sound: r.prep.sound, fade: r.prep.fade, meeting: nil, day: day,
+                                              alarm: m.block.ringsOnSilent))
             }
             if r.start.on {
                 let body = during.map { "It's \(time(m.start)), during \($0.title)." } ?? "It's \(time(m.start))."
                 merged.append(PlannedReminder(keys: [key("start")], at: m.start, role: .start, blockId: m.block.id,
                                               title: "Now: \(m.title)", body: body, sound: r.start.sound, fade: r.start.fade,
-                                              meeting: nil, day: day))
+                                              meeting: nil, day: day, alarm: m.block.ringsOnSilent))
             }
         }
 
@@ -216,30 +221,40 @@ public struct Planner: Sendable {
         return order.map { t in
             let group = groups[t]!
             let keys = group.flatMap(\.keys)
+            // If any block here rings even on silent, the one reminder left rings as an alarm.
+            let alarm = group.contains(where: \.alarm)
             func find(_ role: ReminderRole) -> PlannedReminder? { group.first { $0.role == role } }
-            if var start = find(.start) { start.keys = keys; return start }
+            if var start = find(.start) { start.keys = keys; start.alarm = alarm; return start }
             let outgoing = find(.end) ?? find(.warn)
             if var prep = find(.prep), let outgoing {
                 let b = list.first { $0.block.id == prep.blockId }
                 prep.keys = keys
+                prep.alarm = alarm
                 prep.title = outgoing.title
                 prep.body = "Next: \(b?.title ?? "") at \(b.map { time($0.start) } ?? "")."
                 return prep
             }
             var one = find(.prep) ?? outgoing!
             one.keys = keys
+            one.alarm = alarm
             return one
         }
     }
 
     // MARK: The rolling window
 
-    /// The next reminders after `now`, up to `limit`, looking up to `horizonDays` ahead. Reminders
-    /// during a pause are left out. If more reminders would follow, a quiet notice comes a minute
-    /// after the last one, asking you to open DayFlow.
+    /// The next reminders after `now`, up to `limit` notifications, looking up to `horizonDays`
+    /// ahead. Reminders during a pause are left out. If more reminders would follow, a quiet notice
+    /// comes a minute after the last one, asking you to open DayFlow.
+    ///
+    /// Reminders of blocks that ring even on silent stay alarms when `alarms` is true (alarms are
+    /// allowed) and sounds are on, up to `alarmLimit`; they don't count towards `limit`, since
+    /// they aren't notifications. Otherwise they become normal reminders.
     public func window(from now: Date, pausedUntil: Date? = nil, limit: Int = Planner.windowLimit,
-                       horizonDays: Int = Planner.horizonDays, sound: Bool = true) -> ReminderWindow {
+                       horizonDays: Int = Planner.horizonDays, sound: Bool = true, alarms: Bool = false,
+                       alarmLimit: Int = Planner.alarmLimit) -> ReminderWindow {
         var upcoming: [PlannedReminder] = []
+        var notifications = 0, alarmCount = 0
         var more = false
         let today = calendar.startOfDay(for: now)
         outer: for offset in 0...horizonDays {
@@ -255,8 +270,10 @@ public struct Planner: Sendable {
                 }
                 .map { $0.element }
             for var ev in day {
-                if upcoming.count == limit { more = true; break outer }
                 if !sound { ev.sound = nil }
+                if ev.alarm && (!alarms || !sound || alarmCount == alarmLimit) { ev.alarm = false }
+                if !ev.alarm && notifications == limit { more = true; break outer }
+                if ev.alarm { alarmCount += 1 } else { notifications += 1 }
                 upcoming.append(ev)
             }
         }

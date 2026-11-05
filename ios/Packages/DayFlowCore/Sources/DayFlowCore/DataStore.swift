@@ -21,7 +21,8 @@ public final class DataStore {
     public internal(set) var clips: [CustomClip] = []
 
     /// 3: blocks can be moments (no end) and can carry their own reminders.
-    public static let exportVersion = 3
+    /// 4: blocks can ring even on silent (`ringOnSilent`).
+    public static let exportVersion = 4
     public static let maxImportBytes = 40 * 1024 * 1024
     public static let maxBackups = 10
 

@@ -50,7 +50,10 @@ struct BlockRow: View {
             .frame(width: 74, alignment: .trailing)
             RoundedRectangle(cornerRadius: 2).fill(Palette.accent).frame(width: 4)
             VStack(alignment: .leading, spacing: 4) {
-                Text(block.title).font(.body.weight(.medium))
+                HStack(spacing: 5) {
+                    Text(block.title).font(.body.weight(.medium))
+                    if model.ringsOnSilent(block) { RingIcon() }
+                }
                 HStack(spacing: 6) {
                     TypeBadge(name: model.typeName(for: block))
                     Text("\(ScheduleEdits.daysText(block.days)) · \(block.isMoment ? "Moment" : TimeText.length(minutes: block.lengthMin))")

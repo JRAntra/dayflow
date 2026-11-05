@@ -562,7 +562,7 @@ function blocksFor(date) {
     .filter((b) => Array.isArray(b.days) && b.days.includes(dow) && (isMoment(b) || toMin(b.end) > toMin(b.start)))
     .map((b) => ({
       id: b.id, title: b.title, type: b.type === OWN_TYPE ? OWN_TYPE : typeOf(b.type).id, reminders: b.reminders,
-      moment: isMoment(b), start: at(date, b.start), end: at(date, b.end || b.start),
+      moment: isMoment(b), rings: !!b.ringOnSilent, start: at(date, b.start), end: at(date, b.end || b.start),
     }))
     .sort((a, b) => a.start - b.start);
 }
@@ -1430,7 +1430,9 @@ function updateTray(now) {
 // Importing replaces the schedule, after backing up the current one in the same format.
 // ---------------------------------------------------------------------------
 
-const EXPORT_VERSION = 3; // 3: blocks can be moments (no end) and carry their own reminders
+// 3: blocks can be moments (no end) and carry their own reminders.
+// 4: blocks can ring even on silent on iPhone (ringOnSilent).
+const EXPORT_VERSION = 4;
 const MAX_IMPORT_BYTES = 40 * 1024 * 1024;
 const MAX_BACKUPS = 10;
 let pendingImport = null; // what the import preview showed, waiting for Replace
@@ -1676,6 +1678,9 @@ function sanitizeBlocks(blocks, typeIds = new Set(blockTypes.map((t) => t.id)), 
       out.type = OWN_TYPE;
       out.reminders = sanitizeReminders(b.reminders, REMINDERS, isSound);
     }
+    // On iPhone its reminders ring as alarms, through silent mode and Focus. Kept here so it
+    // travels in export files; the Mac's own reminders don't change.
+    if (b.ringOnSilent) out.ringOnSilent = true;
     return out;
   }).sort((a, b) => toMin(a.start) - toMin(b.start));
 }

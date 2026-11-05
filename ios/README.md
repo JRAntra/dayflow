@@ -37,6 +37,7 @@ DayFlow/                          the app
   AppModel.swift                  state for every screen; refreshes reminders after each change
   DayFlowApp.swift                notification taps and actions, background refresh, opened files
   Services/ReminderScheduler.swift  the next 62 reminders as notifications, plus the notice
+  Services/AlarmScheduler.swift  blocks that ring even on silent, as AlarmKit alarms (iOS 26+)
   Services/CalendarService.swift  meetings from the iPhone's calendars (EventKit), Join links
   Services/LiveActivityController.swift  the Live Activity and the widgets' data
   Sound/SoundLibrary.swift        writes each sound as CAF with your volume and Fade in built in
@@ -56,5 +57,6 @@ The built-in sounds come from `../assets/sounds`, shared with the Mac app. The a
 
 - **Reminders are scheduled ahead.** iOS suspends apps in the background, so instead of the Mac's once-a-second check, the next reminders are scheduled as notifications (up to 62, as iOS allows 64), refilled whenever the app runs. A final notice asks you to open DayFlow if it hasn't run for a while.
 - **Sounds are pre-rendered.** Notifications play their sound at the ringer volume, from start to end, so the volume and Fade in are built into a copy of each sound (`Library/Sounds/df-<hash>.caf`, 16-bit PCM, at most 30 seconds).
+- **Ring even on silent uses AlarmKit.** Notifications always follow the silent switch, so a block set to ring even on silent has its reminders set as alarms instead (iOS 26 and later, after you allow alarms). Each alarm's id is a hash of what it says and when, so unchanged alarms are left alone on each refresh. The iOS 27 Simulator refuses AlarmKit permission without asking; turn on **Alarms** in the Simulator's Settings → Apps → DayFlow instead (the UI test does this).
 - **No snooze, no cards, no window modes.** Meeting reminders have Join or Open in Calendar; the Mini timer's job goes to the Live Activity and widgets.
 - **Meetings come from EventKit**, not Google's API, so there's no OAuth client to set up.

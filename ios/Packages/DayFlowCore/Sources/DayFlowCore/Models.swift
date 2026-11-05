@@ -6,6 +6,8 @@ import Foundation
 /// One block of your weekly plan. Times are "HH:mm" in local time; days are 0 (Sunday) to 6.
 /// A block with an empty `end` is a **moment**: it happens at its start time and doesn't last.
 /// A block whose `type` is "own" has its own `reminders` instead of a block type's.
+/// A block with `ringOnSilent` rings each of its reminders as an alarm on iPhone, through the
+/// silent switch and Focus.
 public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var title: String
@@ -15,11 +17,20 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var type: String
     /// The block's own reminders, when `type` is "own".
     public var reminders: TypeReminders?
+    /// true, or left out of the file when off.
+    public var ringOnSilent: Bool?
 
     public init(id: String = Block.newId(), title: String, start: String, end: String, days: [Int], type: String,
-                reminders: TypeReminders? = nil) {
+                reminders: TypeReminders? = nil, ringsOnSilent: Bool = false) {
         self.id = id; self.title = title; self.start = start; self.end = end; self.days = days; self.type = type
         self.reminders = reminders
+        self.ringOnSilent = ringsOnSilent ? true : nil
+    }
+
+    /// "Ring even on silent": on iPhone each reminder rings as an alarm, until you tap Stop.
+    public var ringsOnSilent: Bool {
+        get { ringOnSilent == true }
+        set { ringOnSilent = newValue ? true : nil }
     }
 
     /// Only a start time: it happens at that moment.

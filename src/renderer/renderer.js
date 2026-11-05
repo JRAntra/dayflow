@@ -287,6 +287,9 @@ function renderNow() {
 }
 
 let currentShown = null;
+// The alarm clock beside a block that rings even on silent on iPhone.
+const RING_ICON = '<svg class="ring-icon" viewBox="0 0 16 16" role="img" aria-label="Rings even on silent on iPhone"><title>Rings even on silent on iPhone</title><circle cx="8" cy="9" r="5.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 6.3V9l1.8 1.2M2.2 4.2 4.4 2.3M13.8 4.2 11.6 2.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
 function renderAgenda() {
   const now = new Date();
   const items = [...state.today.blocks, ...state.today.meetings].sort((a, b) => a.start - b.start || (a.kind === 'meeting' ? 1 : -1));
@@ -303,7 +306,7 @@ function renderAgenda() {
         <span class="tl-time">${fmt(i.start)}</span>
         <span class="tl-dot" aria-hidden="true"></span>
         <div class="tl-body">
-          <span class="tl-what"><span class="tl-title">${esc(i.title)}</span><span class="tl-sub">${esc(label)}</span></span>
+          <span class="tl-what"><span class="tl-title">${esc(i.title)}${i.rings ? RING_ICON : ''}</span><span class="tl-sub">${esc(label)}</span></span>
           <span class="tl-range">${moment ? `at ${fmt(i.start)}` : `until ${fmt(i.end)}`}</span>
           ${join}
         </div>
@@ -386,6 +389,7 @@ function renderEditor({ enter = null } = {}) {
         <div class="meta">
           <label class="type-pick"><span class="dot" aria-hidden="true"></span><select class="type-select" aria-label="Block type"></select></label>
           <span class="dur"></span>
+          <span class="ring-mark"></span>
           <button type="button" class="rems-toggle" aria-expanded="false">Reminders ▸</button>
         </div>
       </div>
@@ -497,6 +501,7 @@ function renderBlockRems(li, b) {
   const open = openRems.has(b.id);
   toggle.setAttribute('aria-expanded', String(open));
   toggle.textContent = open ? 'Reminders ▾' : 'Reminders ▸';
+  li.querySelector('.ring-mark').innerHTML = b.ringOnSilent ? RING_ICON : '';
   box.hidden = !open;
   if (!open) return;
   const own = b.type === OWN_TYPE;
@@ -504,9 +509,18 @@ function renderBlockRems(li, b) {
   const type = state.blockTypes.find((t) => t.id === b.type) || state.blockTypes[0];
   const reminders = own ? b.reminders : type.reminders;
   box.innerHTML = `<p class="rems-note muted">${own ? 'Set just for this block.' : `From the ${esc(type.name)} type. Change it in Settings → Block types, or choose Own reminders.`}</p>`
-    + reminderRowsHtml(spec, b.title || 'This block');
+    + reminderRowsHtml(spec, b.title || 'This block')
+    + `<label class="ring-row"><input type="checkbox" class="switch ring-check"${b.ringOnSilent ? ' checked' : ''}>
+        <span><strong>Ring on silent (iPhone)</strong>
+        <span class="muted">On iPhone, each reminder rings like an alarm, through silent mode and Focus, until you tap Stop. Reminders on this Mac don't change.</span></span></label>`;
   box.classList.toggle('read-only', !own);
   fillReminderRows(box, reminders);
+  // The switch belongs to the block, so it can be changed with a type too.
+  box.querySelector('.ring-check').addEventListener('change', (e) => {
+    if (e.target.checked) b.ringOnSilent = true; else delete b.ringOnSilent;
+    li.querySelector('.ring-mark').innerHTML = b.ringOnSilent ? RING_ICON : '';
+    setDirty(true);
+  });
   if (own) {
     wireReminderRows(box, spec, () => {
       b.reminders = { ...b.reminders, ...readReminderRows(box, spec) }; // a moment keeps its hidden Heads-up and Time's up
@@ -514,7 +528,7 @@ function renderBlockRems(li, b) {
     });
   } else {
     // Read-only, but ▶ still plays.
-    box.querySelectorAll('input, select, .rem-fade, .step-down, .step-up').forEach((el) => { el.disabled = true; });
+    box.querySelectorAll('.rem-row input, .rem-row select, .rem-fade, .step-down, .step-up').forEach((el) => { el.disabled = true; });
     box.querySelectorAll('.rem-play').forEach((btn) => {
       const row = btn.closest('.rem-row');
       btn.addEventListener('click', () => play(row.querySelector('.rem-sound').value, null, $('set-volume').value,

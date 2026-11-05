@@ -151,6 +151,10 @@ Normally a block's reminders come from its [type](#5-block-types-and-their-remin
 
 With a type chosen, **Reminders ▸** shows that type's settings, read-only (▶ still plays them): *From the Focus type. Change it in Settings → Block types, or choose Own reminders.* Choosing a type for a block with its own reminders asks first, because its own settings are removed. Such blocks show **Own** as their type on Today, in cards and in the menu bar.
 
+### Ring on silent (iPhone)
+
+At the bottom of **Reminders ▸**, **Ring on silent (iPhone)** sets a block to [ring even on silent](#ringing-even-on-silent) on your iPhone, where each of its reminders rings as an alarm. You can set it on the Mac, with a type or with Own reminders, and it travels to the iPhone in export files. It's saved with **Save schedule**, and an alarm clock ⏰ marks the block in the schedule and in Today's flow. Reminders on the Mac don't change: they already play whatever your Mac's Focus, and only the Mac's volume or mute silences them.
+
 ### Import, export and backups
 
 The **Import…**, **Export…** and **Backups** buttons at the top are explained in [Export, import and backups](#13-export-import-and-backups).
@@ -447,12 +451,12 @@ The sun-over-water icon in the menu bar shows the minutes left in the current bl
 
 **Schedule → Export…** saves a `.json` file containing:
 
-- your blocks and moments, with any block's own reminders;
+- your blocks and moments, with any block's own reminders and whether it rings even on silent;
 - the block types they use, with all four reminders each;
 - your Meetings reminders and volume;
 - any of your own sound clips those reminders use (built into the file, so it works on another Mac).
 
-It **never** includes your Google sign-in. Files from this version (with moments and own reminders) need an up-to-date DayFlow to import; an older version says *"That file was made by a newer version of DayFlow."* Older files still import. Use exports to back up your plan, move it to another Mac, or share a schedule with someone.
+It **never** includes your Google sign-in. Files from this version (version 4, with moments, own reminders and Ring on silent) need an up-to-date DayFlow to import; an older version says *"That file was made by a newer version of DayFlow."* Older files still import. Use exports to back up your plan, move it to another Mac, or share a schedule with someone.
 
 ### Import
 
@@ -596,6 +600,7 @@ Three tabs at the bottom:
 
 - **Tap a block** to edit it: name, type, start and end times, the days it repeats on, and its **Reminders**. **Save** applies the change straight away and updates reminders. There's no separate Save schedule step.
 - **Ends** has a switch: turn it off for a [moment](#moments), a block with only a start time. The list shows *Moment* instead of the length.
+- **Ring even on silent**, at the top of **Reminders**, makes each of the block's reminders ring as an alarm. See [Ringing even on silent](#ringing-even-on-silent).
 - **Own reminders**, at the top of the Type menu, makes the **Reminders** section editable for this block alone, starting from its type's settings. With a type, the section shows that type's reminders, read-only. Choosing a type again asks first. See [A block's own reminders](#a-blocks-own-reminders).
 - **Save** stays greyed out until the block has a name, ends after it starts (or has no end), and repeats on at least one day. Overlapping blocks are allowed; the block shows which one it overlaps.
 - **＋** adds a block, following the Mac's rule: it starts where your latest block ends, lasts 30 minutes, and copies that block's days and type.
@@ -620,13 +625,24 @@ The reminders themselves are the Mac's: the same four per type, the same wording
 
 What's different on iPhone:
 
-- **The silent switch and Focus apply.** With the switch on silent, reminders vibrate without a sound. During a Focus, iOS holds DayFlow's notifications back unless you allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.
+- **The silent switch and Focus apply**, except to blocks that [ring even on silent](#ringing-even-on-silent). With the switch on silent, reminders vibrate without a sound. During a Focus, iOS holds DayFlow's notifications back unless you allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.
 - **There's no Snooze** and no reminder cards. Swipe a notification away when you're done with it.
 - **Meeting reminders** with a video link have a **Join** button (press and hold the notification to see it). Tapping the notification joins too. Without a link, the button is **Open in Calendar**.
 - **Tapping a block reminder** opens Today.
 - **Turn off reminders…** on Today (or in Settings → General) silences everything **For 1 hour**, **For 24 hours** or **Until I turn them on**. DayFlow removes every scheduled notification and ends the Live Activity, so nothing rings, even if you then swipe DayFlow away. Today shows *Reminders off… · Turn on*, the widgets show *Reminders off*, and **Turn on** reschedules everything. Reminders that fall in the off time are skipped.
 - **Swiping DayFlow away doesn't stop reminders.** iOS delivers the notifications DayFlow scheduled ahead whether or not the app is running, and doesn't tell an app it's been swiped away. Use **Turn off reminders** instead.
 - **Settings → General → Send a test notification** shows what a block starting looks like. **Scheduled ahead** says how far ahead your reminders go.
+
+### Ringing even on silent
+
+For a block you can't afford to miss, such as *Take medicine*, turn on **Ring even on silent** at the top of its **Reminders** section. Each of its reminders then rings as an **alarm**, like the Clock app's: through the silent switch and any Focus, on the Lock Screen and in the Dynamic Island, until you tap **Stop**. It needs iOS 26 or later; on earlier versions the switch isn't shown, and the block's reminders are normal ones.
+
+- **Every reminder the block has** rings this way: Start preparation, Start, Heads-up and Time's up, whichever are on (a moment has just the first two). Each uses its own sound, at your volume, with Fade in if it's set. When one of its reminders merges with another block's, the merged reminder rings as an alarm too.
+- **The first time** you turn it on, iOS asks whether DayFlow may set alarms. If you say no, the switch turns back off and says why, with **Open Settings**: turn on **Alarms** in **Settings → Apps → DayFlow**, then turn the switch on again. If you later turn Alarms off there, the block's reminders come as normal reminders, quiet on silent, and its edit sheet says *Alarms are off in Settings*.
+- An **alarm clock** ⏰ marks these blocks in the list, the day view and Today's flow.
+- **Turn off reminders** turns their alarms off too, and **Turn on** brings them back. Turning off **Play sounds** in Settings → Sounds makes them normal, silent reminders.
+- Alarms are set ahead of time like notifications, and don't count towards the 62. Up to 48 are set at once; any after that are normal reminders until DayFlow next runs.
+- **Snooze** isn't offered, as with every reminder on iPhone: tap Stop.
 
 ### Sounds on iPhone
 
@@ -681,6 +697,9 @@ Your clips are in **On My iPhone → DayFlow → Clips**. Your schedule, types a
 
 **Reminders don't make a sound.**
 Check the silent switch (on silent, reminders only vibrate), then the ringer volume, then **Settings → Sounds → Play sounds** in DayFlow.
+
+**A block set to ring even on silent doesn't.**
+Open the block: if it says *Alarms are off in Settings*, tap **Open Settings** and turn on **Alarms**. Alarms need iOS 26 or later.
 
 **Reminders don't show during a Focus.**
 Allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.
