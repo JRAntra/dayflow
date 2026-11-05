@@ -64,6 +64,7 @@ targets:
         BGTaskSchedulerPermittedIdentifiers:
           - com.jrantra.dayflow.refresh
         NSSupportsLiveActivities: true
+        NSAlarmKitUsageDescription: DayFlow rings the reminders of blocks you set to "Ring even on silent" as alarms, so you hear them even when your iPhone is on silent or in Focus.
         NSCalendarsFullAccessUsageDescription: DayFlow reads the calendars you choose so it can remind you before meetings start.
         NSCalendarsUsageDescription: DayFlow reads the calendars you choose so it can remind you before meetings start.
         # dayflow://today, used by the Live Activity and widgets.

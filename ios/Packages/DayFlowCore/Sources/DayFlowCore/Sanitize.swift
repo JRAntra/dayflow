@@ -93,7 +93,9 @@ public enum Sanitize {
                 own = typeReminders(r, isSound: isSound)
             }
             let id = b["id"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString.lowercased()
-            out.append(Block(id: id, title: title, start: start, end: rawEnd, days: days, type: type, reminders: own))
+            let rings = flag(b["ringOnSilent"], false)
+            out.append(Block(id: id, title: title, start: start, end: rawEnd, days: days, type: type, reminders: own,
+                             ringsOnSilent: rings))
         }
         return sortByStart(out)
     }

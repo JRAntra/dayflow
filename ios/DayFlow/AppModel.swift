@@ -58,6 +58,11 @@ final class AppModel {
     private(set) var calendarAccess = false
     private(set) var widgetsAvailable = true
     private(set) var scheduledCount = 0
+    /// Whether DayFlow may set alarms, for blocks that ring even on silent. `.unsupported`
+    /// before iOS 26, where the switch is hidden.
+    private(set) var alarmAccess: AlarmScheduler.Access = AlarmScheduler.access
+    /// How many alarms are set right now.
+    private(set) var alarmCount = 0
     private(set) var lastRefresh: Date?
     var isForeground = false
 
@@ -98,6 +103,18 @@ final class AppModel {
                           clipsDir: docs.appendingPathComponent("Clips", isDirectory: true))
         sync()
         calendarAccess = calendarService.hasAccess
+        #if DEBUG
+        // `-uiTestRingSoon` adds a moment, "Ring test", two minutes from now, to set ringing.
+        if args.contains("-uiTestRingSoon") {
+            let now = Date(), cal = Calendar.current
+            let m = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now) + 2
+            if m < 24 * 60 {
+                let b = Block(title: "Ring test", start: HHMM.string(m), end: "", days: [cal.component(.weekday, from: now) - 1],
+                              type: Specs.defaultType)
+                try? store.saveBlocks(store.blocks + [b]); sync()
+            }
+        }
+        #endif
     }
 
     var onboarded: Bool { settings.onboarded }
@@ -156,9 +173,11 @@ final class AppModel {
         }
         meetings = calendarService.meetings(calendarIds: settings.calendars ?? [])
         notificationStatus = await ReminderScheduler.authorization()
+        alarmAccess = AlarmScheduler.access
         let planner = self.planner
         if settings.onboarded {
             scheduledCount = await ReminderScheduler.reschedule(planner: planner, store: store)
+            alarmCount = AlarmScheduler.scheduledCount
         }
         await LiveActivityController.update(planner: planner, enabled: settings.liveActivity && settings.onboarded && !isOff,
                                             canStart: isForeground)
@@ -297,7 +316,17 @@ final class AppModel {
 
     var isOff: Bool { settings.isOff(at: Date()) }
 
-    // MARK: Notifications and calendars
+    // MARK: Notifications, alarms and calendars
+
+    /// Shows the alarm icon: the block rings even on silent, and this iPhone can set alarms.
+    func ringsOnSilent(_ b: Block) -> Bool { b.ringsOnSilent && alarmAccess != .unsupported }
+
+    /// Asks to set alarms the first time "Ring even on silent" is turned on. Returns whether
+    /// alarms are allowed.
+    func allowAlarms() async -> Bool {
+        alarmAccess = alarmAccess == .notDetermined ? await AlarmScheduler.requestAccess() : AlarmScheduler.access
+        return alarmAccess == .authorized
+    }
 
     func requestNotifications() async {
         await ReminderScheduler.requestPermission()

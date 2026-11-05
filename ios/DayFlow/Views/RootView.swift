@@ -46,6 +46,11 @@ struct RootView: View {
                 .font(.system(size: 1)).opacity(0.02).allowsHitTesting(false)
                 .accessibilityIdentifier("launch-arguments")
         }
+        .overlay(alignment: .topTrailing) {
+            Text("alarms \(model.alarmCount)")
+                .font(.system(size: 1)).opacity(0.02).allowsHitTesting(false)
+                .accessibilityIdentifier("alarm-count")
+        }
         // For testing in the Simulator: `simctl launch … -startTab schedule` opens that tab.
         .onAppear {
             switch UserDefaults.standard.string(forKey: "startTab") {
@@ -89,6 +94,20 @@ struct BannerView: View {
 }
 
 /// A type's name in a small rounded label, like the Mac's badge.
+/// The alarm clock beside a block that rings even on silent.
+struct RingIcon: View {
+    static let spoken = "rings even on silent"
+    var size: CGFloat = 12
+
+    var body: some View {
+        Image(systemName: "alarm.fill")
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(Palette.sun)
+            .accessibilityLabel(Self.spoken)
+            .accessibilityIdentifier("ring-icon")
+    }
+}
+
 struct TypeBadge: View {
     let name: String
     var tint: Color = Palette.accent

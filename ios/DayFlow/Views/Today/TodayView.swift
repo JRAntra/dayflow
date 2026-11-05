@@ -215,7 +215,10 @@ struct DayTimeline: View {
             .overlay { if current { Circle().stroke(tint.opacity(0.25), lineWidth: 6) } }
             .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(i.title).font(.body.weight(current ? .semibold : .regular))
+                HStack(spacing: 5) {
+                    Text(i.title).font(.body.weight(current ? .semibold : .regular))
+                    if case .block(let b) = i, model.ringsOnSilent(b.block) { RingIcon() }
+                }
                 HStack(spacing: 6) {
                     switch i {
                     case .block(let b): Text(model.typeName(for: b.block))

@@ -9,9 +9,13 @@ import SwiftUI
 /// The Type menu starts with Own reminders: the block's reminder rows are then editable for this
 /// block alone (starting as a copy of its type's). With a type, the rows show that type's
 /// settings, read-only.
+///
+/// "Ring even on silent" (iOS 26 and later) turns every reminder of the block into an alarm.
+/// The first time it's turned on, iOS asks whether DayFlow may set alarms.
 struct BlockEditSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     let editing: BlockEditing
 
     @State private var block: Block
@@ -21,6 +25,8 @@ struct BlockEditSheet: View {
     @State private var askUseType: String?
     /// The end it had before Ends was switched off, so switching it back on restores it.
     @State private var lastEnd: String?
+    /// You turned Ring even on silent on, but alarms aren't allowed.
+    @State private var alarmsRefused = false
     @FocusState private var nameFocused: Bool
 
     init(editing: BlockEditing) {
@@ -181,6 +187,7 @@ struct BlockEditSheet: View {
         let own = block.hasOwnReminders
         let source = own ? (block.reminders ?? Specs.startingTypeReminders) : model.typeOf(block.type).reminders
         Section {
+            if model.alarmAccess != .unsupported { ringRows }
         } header: {
             Text("Reminders")
         } footer: {
@@ -196,6 +203,45 @@ struct BlockEditSheet: View {
                     block.reminders = all
                 }), readOnly: !own)
         }
+    }
+
+    /// The switch, and why it can't ring when alarms aren't allowed.
+    @ViewBuilder var ringRows: some View {
+        Toggle(isOn: ringBinding) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Ring even on silent")
+                Text("Each reminder rings like an alarm, through silent mode and Focus, until you tap Stop.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityIdentifier("ring-on-silent")
+        if model.alarmAccess == .denied && (block.ringsOnSilent || alarmsRefused) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(block.ringsOnSilent
+                      ? "Alarms are off in Settings. Until you allow them, this block's reminders are normal reminders, quiet on silent."
+                      : "DayFlow isn't allowed to set alarms. Turn on Alarms in Settings › Apps › DayFlow, then turn this on again.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.footnote).foregroundStyle(Palette.sun)
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
+                .font(.footnote.weight(.semibold))
+            }
+            .accessibilityIdentifier("alarms-off-note")
+        }
+    }
+
+    /// Turning it on asks for alarms the first time; if they aren't allowed it turns back off.
+    var ringBinding: Binding<Bool> {
+        Binding(get: { block.ringsOnSilent }, set: { on in
+            block.ringsOnSilent = on
+            guard on else { return }
+            Task {
+                if await !model.allowAlarms() {
+                    withAnimation { block.ringsOnSilent = false; alarmsRefused = true }
+                }
+            }
+        })
     }
 
     func timeBinding(_ key: WritableKeyPath<Block, String>) -> Binding<Date> {

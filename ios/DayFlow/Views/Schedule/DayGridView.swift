@@ -47,7 +47,7 @@ struct DayGridView: View {
                             NowLine().padding(.leading, Self.labelWidth - 4).zIndex(3)
                         }
                         ForEach(dayBlocks.filter(\.isMoment)) { m in
-                            MomentMark(block: m, typeName: model.typeName(for: m), width: width,
+                            MomentMark(block: m, typeName: model.typeName(for: m), rings: model.ringsOnSilent(m), width: width,
                                        onTap: { edit(BlockEditing(block: m, original: m, day: day)) },
                                        onCommit: { commit($0, original: m) })
                                 .padding(.leading, Self.labelWidth)
@@ -56,7 +56,7 @@ struct DayGridView: View {
                         ForEach(dayBlocks.filter { !$0.isMoment }) { b in
                             let col = columns[b.id] ?? (0, 1)
                             let colWidth = width / CGFloat(col.of)
-                            GridBlock(block: b, typeName: model.typeName(for: b), selected: selected == b.id,
+                            GridBlock(block: b, typeName: model.typeName(for: b), rings: model.ringsOnSilent(b), selected: selected == b.id,
                                       width: colWidth - 3,
                                       onSelect: { withAnimation(.snappy) { selected = b.id } },
                                       onTap: { edit(BlockEditing(block: b, original: b, day: day)) },
@@ -153,6 +153,8 @@ struct NowLine: View {
 struct MomentMark: View {
     let block: Block
     let typeName: String
+    /// Rings even on silent: shows the alarm icon.
+    var rings = false
     let width: CGFloat
     let onTap: () -> Void
     let onCommit: (Block) -> Void
@@ -168,6 +170,7 @@ struct MomentMark: View {
         HStack(spacing: 6) {
             Rectangle().fill(Palette.accent).frame(width: 9, height: 9).rotationEffect(.degrees(45))
             Text(b.title).font(.caption.weight(.semibold)).lineLimit(1)
+            if rings { RingIcon(size: 9) }
             Text(dy != nil ? BlockRow.time(b.startMin) : typeName)
                 .font(.caption2).foregroundStyle(dy != nil ? Palette.accent : .secondary).monospacedDigit()
             Rectangle().fill(Palette.accent.opacity(0.6)).frame(height: 1.5)
@@ -190,7 +193,7 @@ struct MomentMark: View {
         .simultaneousGesture(TapGesture().onEnded { if held { held = false } else { onTap() } })
         .sensoryFeedback(.selection, trigger: dy.map(minutes))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(block.title), a moment at \(BlockRow.time(block.startMin)), \(typeName)")
+        .accessibilityLabel("\(block.title), a moment at \(BlockRow.time(block.startMin)), \(typeName)\(rings ? ", \(RingIcon.spoken)" : "")")
         .accessibilityHint("Double-tap to edit. Swipe up or down for actions to move it.")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onTap() }
@@ -206,6 +209,8 @@ struct MomentMark: View {
 struct GridBlock: View {
     let block: Block
     let typeName: String
+    /// Rings even on silent: shows the alarm icon.
+    var rings = false
     let selected: Bool
     let width: CGFloat
     let onSelect: () -> Void
@@ -238,7 +243,10 @@ struct GridBlock: View {
         let compact = height < 40
         let dragging = drag != nil
         VStack(alignment: .leading, spacing: 1) {
-            Text(b.title).font(.caption.weight(.semibold)).lineLimit(compact ? 1 : 2)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(b.title).font(.caption.weight(.semibold)).lineLimit(compact ? 1 : 2)
+                if rings { RingIcon(size: 9) }
+            }
             if !compact || dragging {
                 Text(dragging ? "\(BlockRow.time(b.startMin)) – \(BlockRow.time(b.endMin))" : typeName)
                     .font(.caption2).foregroundStyle(dragging ? Palette.accent : .secondary)
@@ -270,7 +278,7 @@ struct GridBlock: View {
         .sensoryFeedback(.impact(weight: .medium), trigger: lifted) { _, new in new }
         .animation(.snappy(duration: 0.2), value: b)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(block.title), \(BlockRow.time(block.startMin)) to \(BlockRow.time(block.endMin)), \(typeName)")
+        .accessibilityLabel("\(block.title), \(BlockRow.time(block.startMin)) to \(BlockRow.time(block.endMin)), \(typeName)\(rings ? ", \(RingIcon.spoken)" : "")")
         .accessibilityHint("Double-tap to edit. Swipe up or down for actions to move or resize.")
         .accessibilityAction(named: "Move 5 minutes earlier") { onCommit(ScheduleEdits.moved(block, by: -5)) }
         .accessibilityAction(named: "Move 5 minutes later") { onCommit(ScheduleEdits.moved(block, by: 5)) }

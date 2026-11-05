@@ -98,7 +98,7 @@ import Testing
         own.start.sound = clip.soundId
         try a.saveBlocks([medicine, Block(id: "o", title: "Run", start: "18:00", end: "19:00", days: [1], type: "own", reminders: own)])
         let export = a.exportPayload()
-        #expect(export["dayflowExport"] == .number(3))
+        #expect(export["dayflowExport"] == .number(4))
         #expect(export["clips"]?.array?.count == 1) // the own reminder's clip travels too
         let b = tempStore()
         let p = try b.readImport(try JSONFile.encode(export), fileName: "x.json")

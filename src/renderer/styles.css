@@ -296,6 +296,13 @@ dialog.sheet > p { margin: var(--space-2) 0; }
 .block-rems .rems-note { margin: 0 0 var(--space-2); }
 .block-rems.read-only .rem-row { opacity: 0.75; }
 .block-rems.read-only .rem-play { opacity: 1; }
+.ring-row { display: flex; gap: var(--space-2); align-items: flex-start; margin-top: var(--space-3); padding-top: var(--space-2); border-top: 0.5px solid var(--separator); }
+.ring-row input { margin-top: 1px; flex: none; }
+.ring-row > span { display: flex; flex-direction: column; gap: 2px; }
+.ring-row .muted { font-size: var(--text-xs); }
+.ring-icon { width: 12px; height: 12px; color: var(--sun); margin-left: 5px; vertical-align: -1px; flex: none; }
+.ring-mark:empty { display: none; }
+.ring-mark .ring-icon { margin-left: 0; }
 .tl-item.moment .tl-dot { border-radius: 2px; transform: rotate(45deg) scale(0.9); }
 .tl-item.moment.current .tl-dot { transform: rotate(45deg) scale(1.2); }
 .dial-moment { fill: var(--accent); stroke: var(--card-solid); stroke-width: 2.5; }
