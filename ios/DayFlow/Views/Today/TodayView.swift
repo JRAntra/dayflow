@@ -41,22 +41,40 @@ struct TodayView: View {
         let blocks = model.planner.blocksFor(now)
         let meetings = model.meetings.filter { Calendar.current.isDate($0.start, inSameDayAs: now) }
         return VStack(spacing: 16) {
-            HStack(spacing: 8) {
-                Text(now.formatted(.dateTime.month(.wide).day()) + " · " + now.timeText)
-                    .font(.subheadline).foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                ProgressPill(now: now)
+            // The date and the day's progress side by side, or one above the other when they
+            // don't fit (large text).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Text(now.formatted(.dateTime.month(.wide).day()) + " · " + now.timeText).lineLimit(1)
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    ProgressPill(now: now)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(now.formatted(.dateTime.month(.wide).day()) + " · " + now.timeText)
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    ProgressPill(now: now)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.leading, 4)
-            .padding(.top, -8)
             notices
             VStack(spacing: 0) {
-                ZStack {
-                    DialView(blocks: blocks, meetings: meetings, now: now)
-                    NowReadout(blocks: blocks, now: now)
-                        .padding(.horizontal, 84)
-                }
+                DialView(blocks: blocks, meetings: meetings, now: now)
+                    // The words in the middle get the same share of the dial on every screen,
+                    // so on a small iPhone they stay clear of the hour numbers too.
+                    .overlay {
+                        GeometryReader { g in
+                            let side = min(g.size.width, g.size.height)
+                            NowReadout(blocks: blocks, now: now)
+                                .frame(width: side * 0.44, height: side * 0.62)
+                                .position(x: g.size.width / 2, y: g.size.height / 2)
+                        }
+                    }
                 .frame(maxWidth: 360)
+                // The dial is a picture with words in a fixed circle: its text grows with yours
+                // only so far, so it never spills over the ring.
+                .dynamicTypeSize(...DynamicTypeSize.xLarge)
                 .padding(.vertical, 4)
                 TurnOffRow(now: now)
                     .padding(.bottom, 4)
@@ -107,12 +125,12 @@ struct NowReadout: View {
                 countdown(current.end.timeIntervalSince(now))
                 let after = blocks.first { $0.start >= current.end }
                 Text(after.map { "Ends at \(current.end.timeText). Next is \($0.title)." } ?? "Ends at \(current.end.timeText). Last block today.")
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).lineLimit(3)
+                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.85)
             } else if let next {
                 Text("Free time").font(.headline)
                 countdown(next.start.timeIntervalSince(now))
                 Text("\(next.title) starts at \(next.start.timeText).")
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).lineLimit(3)
+                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.85)
             } else {
                 Text("Done for today").font(.headline)
                 Text("Everything has finished.").font(.caption).foregroundStyle(.secondary)
@@ -207,6 +225,8 @@ struct ProgressPill: View {
 struct DayTimeline: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
+    /// At the largest text sizes the time moves from its column into the line under the name.
+    @Environment(\.dynamicTypeSize) private var textSize
     let blocks: [DayBlock]
     let meetings: [Meeting]
     let now: Date
@@ -282,11 +302,14 @@ struct DayTimeline: View {
         let past = now >= i.end && !done
         let current = isCurrent(i)
         let tint = i.isMeeting ? Palette.sun : Palette.accent
+        let stacked = textSize.isAccessibilitySize
         return HStack(spacing: 12) {
+            if !stacked {
             Text(i.start.timeText)
                 .font(.subheadline).foregroundStyle(.secondary)
                 .frame(width: 72, alignment: .trailing)
                 .monospacedDigit()
+            }
             if i.isEvent, let b = i.block {
                 CheckButton(done: done, disabled: skipped) { withAnimation(.snappy) { model.setDone(b.id, !done) } }
                     .frame(width: 24)
@@ -305,14 +328,11 @@ struct DayTimeline: View {
                     if i.block?.isRepeat == true { RepeatMark() }
                     if case .block(let b) = i, model.ringsOnSilent(b.block) { RingIcon() }
                 }
-                HStack(spacing: 6) {
-                    switch i {
-                    case .block(let b): Text(model.typeName(for: b.block))
-                    case .meeting: Text("Meeting")
-                    }
-                    // An event happens at its time; blocks and meetings last until their end.
-                    Text(skipped ? "· skipped today" : done ? "· done" : i.isEvent ? "· at \(i.start.timeText)" : "· until \(i.end.timeText)")
-                }
+                // An event happens at its time; blocks and meetings last until their end.
+                let kind: String = { switch i { case .block(let b): model.typeName(for: b.block); case .meeting: "Meeting" } }()
+                let when = skipped ? "skipped today" : done ? "done" : i.isEvent ? "at \(i.start.timeText)"
+                    : stacked ? "\(i.start.timeText) – \(i.end.timeText)" : "until \(i.end.timeText)"
+                Text("\(kind) · \(when)")
                 .font(.caption).foregroundStyle(done ? Palette.sun : .secondary)
             }
             Spacer(minLength: 4)

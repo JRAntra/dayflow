@@ -48,6 +48,9 @@ struct ScheduleView: View {
                                       editRepeat: { b in repeatEditing = RepeatEditing(event: b) })
                     } else {
                         DayGridView(day: day) { open($0) }
+                            // Like Calendar's day view, the hour grid's text grows only so far, so
+                            // blocks and events keep their names on screen.
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                     }
                 }
                 .frame(maxHeight: .infinity)

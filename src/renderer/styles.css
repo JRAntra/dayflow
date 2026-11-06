@@ -415,3 +415,20 @@ dialog.sheet > p { margin: var(--space-2) 0; }
 .mini-switch { justify-content: flex-start; }
 .mini-switch .switch { margin-left: auto; }
 .toast-undo { margin-left: var(--space-3); height: 22px; }
+
+/* Narrow windows ------------------------------------------------------------
+   Below about 820 points of page width (the window's minimum is 780), the schedule's rows
+   put the days under the times and name, the reminder rows put their sound controls on a line
+   of their own, and Block types stacks the list above the details, so nothing runs off the
+   side or scrolls sideways. */
+#view-schedule, #view-settings { container-type: inline-size; }
+@container (max-width: 820px) {
+  .sched-cols { display: none; }
+  .block-row { grid-template-columns: 112px 112px minmax(0, 1fr) 28px; row-gap: var(--space-2); }
+  .block-row > .days, .block-row > .days-text { grid-row: 2; grid-column: 1 / 4; }
+  .block-row > .remove { grid-row: 1; grid-column: 4; }
+  .block-row .dur { white-space: normal; }
+  .rem-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-2); }
+  .rem-row .slot { grid-column: 1 / -1; }
+  .types-split { grid-template-columns: minmax(0, 1fr); }
+}

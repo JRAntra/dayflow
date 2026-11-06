@@ -23,11 +23,13 @@ final class MeetingTests: XCTestCase {
 
         app.buttons["Today"].tap()
         // Today's flow is a list below the dial: scroll down to the meeting.
-        let meeting = app.staticTexts["Standup"]
+        // ("Standup" also shows in the dial's centre as what's next, so look for its row's Join.)
+        let join = app.buttons["Join"]
         _ = app.buttons["Turn off reminders…"].waitForExistence(timeout: 8)
-        for _ in 0..<6 where !meeting.exists { app.swipeUp(velocity: .slow) }
-        XCTAssertTrue(meeting.waitForExistence(timeout: 8), "The meeting should be on Today")
-        XCTAssertTrue(app.buttons["Join"].exists, "The Meet link in the notes should give a Join button")
+        for _ in 0..<8 where !(join.exists && join.isHittable) { app.swipeUp(velocity: .slow) }
+        XCTAssertTrue(app.staticTexts["Standup"].exists || app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Standup'")).firstMatch.exists,
+                      "The meeting should be on Today")
+        XCTAssertTrue(join.waitForExistence(timeout: 5), "The Meet link in the notes should give a Join button")
         app.swipeUp()
         let today = XCTAttachment(screenshot: app.screenshot()); today.name = "today-meeting"; today.lifetime = .keepAlways
         add(today)

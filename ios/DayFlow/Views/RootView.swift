@@ -130,6 +130,7 @@ struct BannerView: View {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
             }
             Text(banner.text)
+                .accessibilityIdentifier("banner-text")
                 .font(.subheadline)
                 .foregroundStyle(banner.isError ? .red : .primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,12 +196,16 @@ struct DayStrip: View {
             }
         }
         .sensoryFeedback(.selection, trigger: selection)
+        // Eight chips share one row: past a point, bigger letters wouldn't fit in them.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 
     private func chip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(text)
                 .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
                 .frame(maxWidth: .infinity, minHeight: 34)
                 .foregroundStyle(selected ? Color.white : .primary)
                 .background(selected ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(.fill.tertiary), in: .capsule)

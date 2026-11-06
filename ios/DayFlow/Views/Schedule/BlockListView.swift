@@ -104,37 +104,55 @@ struct RepeatMark: View {
 
 struct BlockRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var textSize
     let block: Block
 
     var body: some View {
         let start = HHMM.minutes(block.start).map(Self.time) ?? block.start
         let end = HHMM.minutes(block.end).map(Self.time) ?? block.end
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(start).font(.subheadline.weight(.semibold))
-                if !block.isEvent { Text(end).font(.caption).foregroundStyle(.secondary) }
+        // At the largest text sizes the time goes above the name, instead of in a narrow column.
+        let stacked = textSize.isAccessibilitySize
+        let layout = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+        layout {
+            if stacked {
+                HStack(spacing: 8) {
+                    KindIcon(block: block)
+                    Text(block.isEvent ? start : "\(start) – \(end)").font(.subheadline.weight(.semibold))
+                }
+                .monospacedDigit()
+            } else {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(start).font(.subheadline.weight(.semibold))
+                    if !block.isEvent { Text(end).font(.caption).foregroundStyle(.secondary) }
+                }
+                .monospacedDigit()
+                .frame(width: 74, alignment: .trailing)
+                KindIcon(block: block).padding(.top, 2)
             }
-            .monospacedDigit()
-            .frame(width: 74, alignment: .trailing)
-            KindIcon(block: block).padding(.top, 2)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
                     Text(block.title).font(.body.weight(.medium))
                     if block.isRepeat { RepeatMark() }
                     if model.ringsOnSilent(block) { RingIcon() }
                 }
-                HStack(spacing: 6) {
+                let detail = "\(ScheduleEdits.daysText(block.days)) · \(block.isEvent ? model.typeName(for: block) : TimeText.length(minutes: block.lengthMin))"
+                if stacked {
                     if !block.isEvent { TypeBadge(name: model.typeName(for: block)) }
-                    Text("\(ScheduleEdits.daysText(block.days)) · \(block.isEvent ? model.typeName(for: block) : TimeText.length(minutes: block.lengthMin))")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    HStack(spacing: 6) {
+                        if !block.isEvent { TypeBadge(name: model.typeName(for: block)) }
+                        Text(detail).font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 if let overlap = ScheduleEdits.overlapText(block, in: model.blocks) {
                     Label(overlap, systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(Palette.sun)
                 }
             }
-            Spacer(minLength: 0)
+            if !stacked { Spacer(minLength: 0) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
@@ -149,15 +167,23 @@ struct BlockRow: View {
 
 /// A whole repeat as one row: "Drink water · 17 events · Every 30 min, 9:00 AM – 5:00 PM".
 struct RepeatRow: View {
+    @Environment(\.dynamicTypeSize) private var textSize
     let first: Block
     let count: Int
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(BlockRow.time(first.series.flatMap { HHMM.minutes($0.first) } ?? first.startMin))
-                .font(.subheadline.weight(.semibold)).monospacedDigit()
-                .frame(width: 74, alignment: .trailing)
-            KindIcon(block: first).padding(.top, 2)
+        let stacked = textSize.isAccessibilitySize
+        let layout = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+        let time = BlockRow.time(first.series.flatMap { HHMM.minutes($0.first) } ?? first.startMin)
+        layout {
+            if stacked {
+                HStack(spacing: 8) { KindIcon(block: first); Text(time).font(.subheadline.weight(.semibold)) }
+            } else {
+                Text(time)
+                    .font(.subheadline.weight(.semibold)).monospacedDigit()
+                    .frame(width: 74, alignment: .trailing)
+                KindIcon(block: first).padding(.top, 2)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
                     Text(first.title).font(.body.weight(.medium))
@@ -167,8 +193,9 @@ struct RepeatRow: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Text(ScheduleEdits.daysText(first.days)).font(.caption).foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
+            if !stacked { Spacer(minLength: 0) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)

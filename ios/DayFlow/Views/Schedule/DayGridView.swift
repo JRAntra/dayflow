@@ -20,6 +20,8 @@ struct DayGridView: View {
 
     @State private var selected: String?
     @State private var pending: PendingChange?
+    /// An event pill's height, which grows with the text size.
+    @ScaledMetric(relativeTo: .caption) private var pillHeight: CGFloat = 20
 
     struct PendingChange: Identifiable {
         let id = UUID()
@@ -47,12 +49,18 @@ struct DayGridView: View {
                         if isToday {
                             NowLine().padding(.leading, Self.labelWidth - 4).zIndex(3)
                         }
+                        // Events sit at the right, over any block (whose name stays readable on
+                        // the left); events too close to share a line go side by side.
+                        let lanes = Self.eventLanes(dayBlocks.filter(\.isEvent), minutesTall: Double(pillHeight / Self.perMinute) + 1)
+                        let region = min(width, max(170, width * 0.62))
                         ForEach(dayBlocks.filter(\.isEvent)) { m in
+                            let lane = lanes[m.id] ?? (0, 1)
+                            let laneWidth = region / CGFloat(lane.of)
                             EventMark(block: m, done: isToday && model.isDone(m.id), skipped: isToday && model.isSkipped(m.id),
-                                      width: width,
+                                      width: laneWidth - 3, height: pillHeight,
                                       onTap: { edit(BlockEditing(block: m, original: m, day: day)) },
                                       onCommit: { commit($0, original: m) })
-                                .padding(.leading, Self.labelWidth)
+                                .padding(.leading, Self.labelWidth + width - region + CGFloat(lane.lane) * laneWidth)
                                 .zIndex(1.5)
                         }
                         ForEach(dayBlocks.filter { !$0.isMoment }) { b in
@@ -86,6 +94,30 @@ struct DayGridView: View {
     }
 
     var isToday: Bool { Calendar.current.component(.weekday, from: Date()) - 1 == day }
+
+    /// Side-by-side lanes for events whose pills (`minutesTall` minutes of grid) would touch:
+    /// each event's lane, and how many lanes its cluster has.
+    static func eventLanes(_ events: [Block], minutesTall: Double) -> [String: (lane: Int, of: Int)] {
+        var result: [String: (Int, Int)] = [:]
+        var cluster: [(String, Int)] = []
+        var laneEnds: [Double] = []
+        var clusterEnd = -Double.infinity
+        func flush() {
+            let n = (cluster.map(\.1).max() ?? -1) + 1
+            for (id, l) in cluster { result[id] = (l, n) }
+            cluster = []; laneEnds = []
+        }
+        for e in events.sorted(by: { $0.startMin < $1.startMin }) {
+            let start = Double(e.startMin) - minutesTall / 2
+            if start >= clusterEnd { flush() }
+            let end = start + minutesTall
+            if let l = laneEnds.firstIndex(where: { $0 <= start }) { laneEnds[l] = end; cluster.append((e.id, l)) }
+            else { laneEnds.append(end); cluster.append((e.id, laneEnds.count - 1)) }
+            clusterEnd = max(clusterEnd, end)
+        }
+        flush()
+        return result
+    }
 
     func commit(_ edited: Block, original: Block) {
         guard edited.start != original.start || edited.end != original.end else { return }
@@ -159,6 +191,7 @@ struct EventMark: View {
     var done = false
     var skipped = false
     let width: CGFloat
+    var height: CGFloat = 20
     let onTap: () -> Void
     let onCommit: (Block) -> Void
 
@@ -171,20 +204,28 @@ struct EventMark: View {
     var body: some View {
         let b = preview
         let tint = done ? Palette.sun : Palette.accent
-        HStack(spacing: 5) {
-            Image(systemName: done ? "star.fill" : "bell.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(tint)
-            Text(b.title).font(.caption.weight(.semibold)).lineLimit(1).strikethrough(skipped)
-            if block.isRepeat { RepeatMark(size: 8) }
-            Text(BlockRow.time(b.startMin))
-                .font(.caption2).foregroundStyle(dy != nil ? Palette.accent : .secondary).monospacedDigit()
+        // With room, the name and the time; in a narrow lane, just the name.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 5) {
+                Image(systemName: done ? "star.fill" : "bell.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(tint)
+                Text(b.title).font(.caption.weight(.semibold)).lineLimit(1).strikethrough(skipped)
+                if block.isRepeat { RepeatMark(size: 8) }
+                Text(BlockRow.time(b.startMin))
+                    .font(.caption2).foregroundStyle(dy != nil ? Palette.accent : .secondary).monospacedDigit()
+                    .lineLimit(1)
+            }
+            .fixedSize()
+            HStack(spacing: 5) {
+                Image(systemName: done ? "star.fill" : "bell.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(tint)
+                Text(b.title).font(.caption.weight(.semibold)).lineLimit(1).strikethrough(skipped)
+            }
         }
         .padding(.horizontal, 8)
-        .frame(height: 20)
+        .frame(width: width, height: height, alignment: .leading)
         .background(tint.opacity(done ? 0.22 : 0.14), in: .capsule)
         .background(Color(.systemBackground), in: .capsule)
         .overlay { Capsule().stroke(tint.opacity(0.5), lineWidth: 1) }
         .opacity(skipped ? 0.45 : 1)
-        .frame(width: width, alignment: .leading)
         .contentShape(.rect)
         .shadow(color: .black.opacity(dy != nil ? 0.18 : 0), radius: 6, y: 3)
         .gesture(
@@ -208,7 +249,7 @@ struct EventMark: View {
         .accessibilityAction { onTap() }
         .modifier(MoveActions(enabled: !block.isRepeat, block: block, onCommit: onCommit))
         // Centred on its time.
-        .padding(.top, max(0, CGFloat(b.startMin) * DayGridView.perMinute - 10))
+        .padding(.top, max(0, CGFloat(b.startMin) * DayGridView.perMinute - height / 2))
     }
 }
 
@@ -243,6 +284,8 @@ struct GridBlock: View {
     let onTap: () -> Void
     let onCommit: (Block) -> Void
 
+    @ScaledMetric(relativeTo: .caption) private var twoLines: CGFloat = 40
+
     enum DragMode { case move, top, bottom }
     @GestureState private var drag: (mode: DragMode, dy: CGFloat)?
     @State private var lifted = false
@@ -266,7 +309,9 @@ struct GridBlock: View {
         let b = preview
         // A point of space above and below, so blocks that touch still read as two.
         let height = max(CGFloat(b.lengthMin) * DayGridView.perMinute - 2, 16)
-        let compact = height < 40
+        // Room for a second line (the type) only when the block is tall enough for it at this
+        // text size; whatever doesn't fit is cut at the block's edge, never drawn over the next.
+        let compact = height < twoLines
         let dragging = drag != nil
         VStack(alignment: .leading, spacing: 1) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
@@ -283,6 +328,7 @@ struct GridBlock: View {
         .padding(.horizontal, 6)
         .padding(.vertical, compact ? 1 : 4)
         .frame(width: width, height: height, alignment: .topLeading)
+        .clipped()
         .background(Palette.accent.opacity(selected ? 0.28 : 0.16), in: .rect(cornerRadius: 6))
         .background(Color(.systemBackground), in: .rect(cornerRadius: 6))
         // The block's own touch area, set before the handles so theirs (just outside its
