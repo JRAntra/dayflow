@@ -63,8 +63,6 @@ final class AppModel {
 
     var tab: AppTab = .today
     var banner: Banner?
-    /// A file opened with "Open in DayFlow", waiting for its import preview.
-    var openedFile: URL?
 
     private(set) var notificationStatus: UNAuthorizationStatus = .notDetermined
     private(set) var calendarAccess = false
@@ -93,7 +91,7 @@ final class AppModel {
         if args.contains("-uiTestReset") {
             // Remembered view choices (List or Day, Group repeats, a pending cheer-up) start over too.
             for key in ["schedule.mode", "schedule.groupRepeats", Self.pendingCheerKey] { UserDefaults.standard.removeObject(forKey: key) }
-            for url in [support, docs.appendingPathComponent("Backups"), docs.appendingPathComponent("Clips"), SoundLibrary.soundsDir] {
+            for url in [support, docs.appendingPathComponent("Clips"), SoundLibrary.soundsDir] {
                 do { if fm.fileExists(atPath: url.path) { try fm.removeItem(at: url) } } catch {
                     NSLog("DFDEBUG reset couldn't remove \(url.lastPathComponent): \(error)")
                 }
@@ -114,8 +112,14 @@ final class AppModel {
             }
         }
         #endif
-        store = DataStore(dir: support, backupsDir: docs.appendingPathComponent("Backups", isDirectory: true),
-                          clipsDir: docs.appendingPathComponent("Clips", isDirectory: true))
+        store = DataStore(dir: support, clipsDir: docs.appendingPathComponent("Clips", isDirectory: true))
+        #if DEBUG
+        // UI tests past the welcome screens start from the sample day (`-uiTestEmpty`: nothing).
+        if args.contains("-uiTestReset"), args.contains("-uiTestOnboarded"), !args.contains("-uiTestEmpty"), !store.hasSchedule {
+            try? store.startSchedule()
+            try? store.addSampleDay()
+        }
+        #endif
         sync()
         calendarAccess = calendarService.hasAccess
         #if DEBUG
@@ -167,7 +171,7 @@ final class AppModel {
     }
 
     func typeOf(_ id: String) -> BlockType { store.typeOf(id) }
-    /// "Focus", "Own" for a block with its own reminders, "Event" or "Repeated event".
+    /// "Focus", "Event" or "Repeated event".
     func typeName(for b: Block) -> String { planner.typeName(for: b) }
     func soundName(_ id: String) -> String { Specs.soundName(id, clips: clips) }
     /// "Soft bell", or "3 sounds, shuffled".
@@ -634,56 +638,29 @@ final class AppModel {
         scanClips()
     }
 
-    // MARK: Export, import and backups
-
-    /// Writes an export file to a temporary folder, ready for the share sheet.
-    func exportFile() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Export", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent(DataStore.exportFileName())
-        try JSONFile.encode(store.exportPayload()).write(to: url, options: .atomic)
-        return url
-    }
-
-    func readImport(_ url: URL) throws -> ImportPreview {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let data = try Data(contentsOf: url)
-        return try store.readImport(data, fileName: url.lastPathComponent)
-    }
-
-    /// Clips in the file that won't play on the iPhone (OGG, say) give way to the starting sound.
-    func unplayableClips(in p: ImportPreview) -> [ImportPreview.Clip] {
-        p.clips.filter { (try? SoundLibrary.check($0.data, name: $0.name, ext: $0.ext)) == nil }
-    }
-
-    func applyImport(_ p: ImportPreview, applySettings: Bool) {
-        let rejected = Set(unplayableClips(in: p).map(\.id))
-        do {
-            let r = try store.applyImport(p, applySettings: applySettings, rejectClips: rejected)
-            sync()
-            refreshSoon()
-            show("Imported \(r.blocks) block\(r.blocks == 1 ? "" : "s"). Your previous schedule is in Backups.")
-        } catch { showError(error) }
-    }
-
-    func backups() -> [URL] { store.backups() }
-
     // MARK: Welcome
 
-    func finishWelcome(sample: Bool, importing: (ImportPreview, Bool)? = nil) async {
+    /// Finishes the welcome screens: an empty schedule to start ("Add a sample day" is on Today
+    /// and Schedule).
+    func finishWelcome() async {
         do {
-            if let (p, applySettings) = importing {
-                try store.startSchedule(sample: false)
-                try store.applyImport(p, applySettings: applySettings, rejectClips: Set(unplayableClips(in: p).map(\.id)))
-            } else {
-                try store.startSchedule(sample: sample)
-            }
+            try store.startSchedule()
             var s = store.settings
             s.onboarded = true
             try store.saveSettings(s)
             sync()
         } catch { showError(error) }
         await refresh()
+    }
+
+    /// "Add a sample day": the eight sample weekday blocks, using Default.
+    func addSampleDay() {
+        let previous = blocks
+        do {
+            try store.addSampleDay()
+            sync()
+            refreshSoon()
+            show("Added the sample day: 8 blocks, Monday to Friday") { [weak self] in self?.saveBlocks(previous, message: "Undone") }
+        } catch { showError(error) }
     }
 }

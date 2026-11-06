@@ -49,6 +49,8 @@ extension DataStore {
     public static let originalsFolder = "Originals"
     /// The largest file DayFlow will take a piece from.
     public static let maxSourceBytes = 200 * 1024 * 1024
+    /// Files up to this size are hashed to recognise a clip you renamed in the folder.
+    public static let maxHashBytes = 40 * 1024 * 1024
 
     public enum Inspection: Sendable {
         case plays(seconds: Double)
@@ -135,7 +137,7 @@ extension DataStore {
             let size = ((try? fm.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
             if size == 0 { scan.others.append(.init(file: name, problem: .unusable("The file is empty."))); continue }
             if size > Self.maxSourceBytes { scan.others.append(.init(file: name, problem: .unusable("Larger than 200 MB."))); continue }
-            if size <= Self.maxImportBytes, let data = try? Data(contentsOf: url) {
+            if size <= Self.maxHashBytes, let data = try? Data(contentsOf: url) {
                 let id = Self.clipHash(data)
                 // The same audio as a clip whose file is gone: you renamed it.
                 if let i = missing.firstIndex(where: { $0.id == id }), let ci = clips.firstIndex(where: { $0.id == id }) {

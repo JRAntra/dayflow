@@ -16,14 +16,10 @@ struct DayFlowApp: App {
                 .environment(model)
                 .tint(Palette.accent)
                 .onOpenURL { url in
-                    // "Open in DayFlow" from AirDrop, Files or Mail: a sound becomes a clip,
-                    // anything else gets the import preview.
+                    // "Open in DayFlow" from AirDrop, Files or Mail: a sound becomes a clip.
                     if url.isFileURL, Specs.clipTypes.contains(url.pathExtension.lowercased()) {
                         model.tab = .settings
                         model.addClip(from: url)
-                    } else if url.isFileURL {
-                        model.openedFile = url
-                        model.tab = .schedule
                     } else if url.scheme == "dayflow" {
                         model.tab = .today
                     }

@@ -21,10 +21,8 @@
       <button class="nav-item" data-view="settings"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h7M15 5.5h1M4 10h2M10 10h6M4 14.5h8M16 14.5h0"/><circle cx="13" cy="5.5" r="1.8"/><circle cx="8" cy="10" r="1.8"/><circle cx="14" cy="14.5" r="1.8"/></svg><span>Settings</span></button>
     </nav>
     <div class="sidebar-foot">
-      <span class="nav-label">Switch to</span>
-      <button class="nav-item" data-mode="mini" title="A small floating countdown"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="6" rx="3"/></svg><span>Mini timer</span></button>
-      <button class="nav-item" data-mode="backstage" title="Tray only: no window, no Dock icon"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="3.5" rx="1.2"/><path d="M5 11h10M7 14.5h6"/></svg><span>Backstage</span></button>
-      <kbd id="rail-kbd" class="rail-kbd" title="Cycles Full, Mini timer and Backstage"></kbd>
+      <label class="nav-item mini-switch" title="A small floating countdown, over every app"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="6" rx="3"/></svg><span>Mini timer</span><input type="checkbox" id="mini-switch" class="switch"></label>
+      <kbd id="rail-kbd" class="rail-kbd" title="Opens or closes this window from any app"></kbd>
       <button class="nav-item quit-item" id="quit-app" title="Stops DayFlow and its reminders until you open it again (⌘Q)"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v6"/><path d="M6.2 5.6a6 6 0 1 0 7.6 0"/></svg><span>Quit DayFlow</span></button>
     </div>
   </aside>
@@ -51,6 +49,7 @@
               <p id="now-count" class="now-count roll"></p>
               <p id="now-note" class="now-note"></p>
               <button id="now-plan" class="btn primary" hidden>Plan your blocks</button>
+              <button id="now-sample" class="btn" hidden>Add a sample day</button>
             </div>
           </div>
           <div class="on-off" id="on-off">
@@ -74,15 +73,14 @@
           <p class="eyebrow">Repeats every week</p>
           <h1>Schedule</h1>
         </div>
-        <div class="head-actions">
-          <button id="import-schedule" class="btn">Import…</button>
-          <button id="export-schedule" class="btn">Export…</button>
-          <button id="show-backups" class="btn ghost">Backups</button>
-        </div>
       </header>
       <label id="group-repeats-row" class="group-row" hidden><input type="checkbox" id="group-repeats" class="switch"> Group repeats</label>
       <div class="sched-cols" aria-hidden="true">
         <span>Starts</span><span>Ends</span><span>Event or block</span><span>Repeats on</span><span></span>
+      </div>
+      <div id="sched-empty" class="sched-empty" hidden>
+        <p>Nothing planned yet. Add events and the blocks of your day with ＋ Add…, or start from an example.</p>
+        <button id="sched-sample" class="btn primary">Add a sample day</button>
       </div>
       <ul id="block-list" class="block-list"></ul>
       <button id="add-block" class="btn add-block" popovertarget="add-menu" aria-haspopup="menu">＋ Add…</button>
@@ -90,11 +88,6 @@
         <button role="menuitem" data-add="event"><strong>Event</strong><span>Rings once, at its time</span></button>
         <button role="menuitem" data-add="repeat"><strong>Repeated event…</strong><span>Every few minutes, from one time to another</span></button>
         <button role="menuitem" data-add="block"><strong>Block</strong><span>A stretch of time, with four reminders</span></button>
-      </div>
-      <div id="savebar" class="savebar" data-state="hidden" role="region" aria-label="Unsaved changes">
-        <span id="sched-status" class="savebar-text">Unsaved changes</span>
-        <button id="discard" class="btn ghost">Discard</button>
-        <button id="save-schedule" class="btn primary">Save schedule</button>
       </div>
     </section>
 
@@ -145,7 +138,7 @@
       <div class="pane settings-group" id="pane-sounds" role="tabpanel" hidden>
         <div class="group">
           <label class="row"><span>Play a sound with each reminder</span><input id="set-sound" type="checkbox" class="switch"></label>
-          <label class="row"><span>Volume</span><span class="range"><input id="set-volume" type="range" min="0" max="100" step="5"><span id="volume-val" class="muted"></span></span></label>
+          <label class="row" id="volume-row"><span>Volume</span><span class="range"><input id="set-volume" type="range" min="0" max="100" step="5"><span id="volume-val" class="muted"></span></span></label>
         </div>
         <p class="group-title">Your clips</p>
         <div class="group drop-zone" id="clip-group">
@@ -184,20 +177,21 @@
       </div>
 
       <div class="pane settings-group" id="pane-general" role="tabpanel" hidden>
-        <p class="group-title">Reminder cards</p>
+        <p class="group-title">Reminders</p>
         <div class="group">
-          <label class="row"><span>Show reminder cards<span class="muted sub-line">A card at the top right that stays until you act on it. macOS notifications still go to Notification Center.</span></span><input id="set-cards" type="checkbox" class="switch"></label>
-          <label class="row"><span>Close cards on their own</span>
+          <label class="row"><span>Reminders show as<span class="muted sub-line" id="alert-style-note"></span></span>
+            <select id="set-alert-style"><option value="cards">Cards</option><option value="notifications">Notifications</option></select></label>
+          <label class="row" id="card-close-row"><span>Close cards on their own</span>
             <select id="set-card-close"><option value="0">Never</option><option value="1">After 1 min</option><option value="5">After 5 min</option></select></label>
-          <div class="row"><span>Try it<span class="muted sub-line">Shows a card and a notification, and plays Default's start sound.</span></span><button id="test-notify" class="btn">Send a test reminder</button></div>
+          <div class="row"><span>Try it<span class="muted sub-line">Shows a reminder the way you chose, and plays Default's start sound.</span></span><button id="test-notify" class="btn">Send a test reminder</button></div>
         </div>
         <p class="group-title">Window</p>
         <div class="group">
-          <label class="row"><span>Press <kbd id="shortcut-kbd"></kbd> anywhere to switch between Full, Mini timer and Backstage</span><input id="set-shortcut" type="checkbox" class="switch"></label>
+          <label class="row"><span>Press <kbd id="shortcut-kbd"></kbd> anywhere to open or close this window</span><input id="set-shortcut" type="checkbox" class="switch"></label>
           <label class="row"><span>Open DayFlow when I log in</span><input id="set-login" type="checkbox" class="switch"></label>
         </div>
         <p id="shortcut-note" class="error" role="alert"></p>
-        <p class="group-note">The mini timer is a small floating countdown you can drag anywhere; double-click it for the full window. Backstage hides the window and Dock icon; reminders keep coming and the tray menu has everything else. Closing this window takes you to whichever of the two you used last.</p>
+        <p class="group-note">Closing this window leaves DayFlow running in the menu bar, without a Dock icon: reminders keep coming, and the menu bar icon opens the window again. The Mini timer (in the sidebar or the menu bar icon's menu) is a small floating countdown you can drag anywhere; double-click it to open the window.</p>
         <p class="status" role="status"></p>
       </div>
     </section>
@@ -209,25 +203,6 @@
     <span id="cheer-ring" class="cheer-ring" aria-hidden="true"><svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18" pathLength="1"/></svg><svg class="star" viewBox="0 0 16 16"><path d="M8 1.6l1.9 4.1 4.5.5-3.4 3 1 4.4L8 11.3l-3.9 2.3 1-4.4-3.4-3 4.5-.5z" fill="currentColor"/></svg></span>
     <span class="cheer-text"><strong id="cheer-title"></strong><span id="cheer-sub"></span><span id="cheer-streak" class="cheer-streak"></span></span>
   </div>
-
-  <dialog id="import-dialog" class="sheet" aria-labelledby="imp-title">
-    <h2 id="imp-title">Import schedule</h2>
-    <p id="imp-summary"></p>
-    <ul id="imp-blocks" class="imp-blocks"></ul>
-    <p id="imp-types" class="muted"></p>
-    <label class="row" id="imp-settings-row">
-      <span>Also apply reminder and sound settings from this file</span>
-      <input id="imp-settings" type="checkbox" class="switch">
-    </label>
-    <ul id="imp-problems" class="imp-problems"></ul>
-    <p id="imp-unsaved" class="error">Your unsaved schedule changes will be lost.</p>
-    <p class="muted">Your current schedule and settings are backed up first. To undo, import the backup (Schedule → Backups).</p>
-    <p id="imp-error" class="error" role="alert"></p>
-    <div class="sheet-actions">
-      <button id="imp-cancel" class="btn">Cancel</button>
-      <button id="imp-apply" class="btn primary">Replace schedule</button>
-    </div>
-  </dialog>
 
   <dialog id="record-dialog" class="sheet clip-sheet" aria-labelledby="rec-title">
     <h2 id="rec-title">Record a clip</h2>

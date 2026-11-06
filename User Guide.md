@@ -4,7 +4,7 @@ DayFlow runs your day in blocks and events. You set up your week once: **blocks*
 
 Everything stays on your Mac. The only time DayFlow goes online is to talk to Google, and only if you connect your calendar.
 
-There's also a beta of **DayFlow for iPhone**. Sections 1 to 16 describe the Mac app; [DayFlow on iPhone](#17-dayflow-on-iphone) covers what's different on the phone.
+There's also a beta of **DayFlow for iPhone**. Sections 1 to 15 describe the Mac app; [DayFlow on iPhone](#16-dayflow-on-iphone) covers what's different on the phone.
 
 ## Contents
 
@@ -17,14 +17,13 @@ There's also a beta of **DayFlow for iPhone**. Sections 1 to 16 describe the Mac
 7. [Reminder cards](#7-reminder-cards)
 8. [Sounds](#8-sounds)
 9. [Meetings from Google Calendar](#9-meetings-from-google-calendar)
-10. [Window modes: Full, Mini timer and Backstage](#10-window-modes-full-mini-timer-and-backstage)
+10. [The window and the Mini timer](#10-the-window-and-the-mini-timer)
 11. [The menu bar icon](#11-the-menu-bar-icon)
 12. [General settings](#12-general-settings)
-13. [Export, import and backups](#13-export-import-and-backups)
-14. [Your data](#14-your-data)
-15. [Troubleshooting](#15-troubleshooting)
-16. [Quick reference](#16-quick-reference)
-17. [DayFlow on iPhone](#17-dayflow-on-iphone)
+13. [Your data](#13-your-data)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Quick reference](#15-quick-reference)
+16. [DayFlow on iPhone](#16-dayflow-on-iphone)
 
 ---
 
@@ -50,7 +49,7 @@ The `macos11` files are the same app built for older macOS versions. If your Mac
 
 ### What you see first
 
-DayFlow opens with a sample weekday schedule so you can see how it works:
+DayFlow starts with an empty schedule and one block type, **Default**. Today and Schedule offer **Add a sample day**, eight weekday blocks, so you can see how it works:
 
 | Time | Block |
 |---|---|
@@ -63,9 +62,9 @@ DayFlow opens with a sample weekday schedule so you can see how it works:
 | 3:15 – 5:00 | Admin and follow-ups |
 | 5:00 – 5:15 | Shut down for the day |
 
-Change or delete any of it in [Schedule](#4-schedule-planning-your-events-and-blocks).
+Change or delete any of it in [Schedule](#4-schedule-planning-your-events-and-blocks), or skip it and add your own.
 
-DayFlow keeps running after you close its window. A small **sun-over-water icon** appears in the menu bar, with the minutes left in the current block next to it. To quit, choose **Quit DayFlow** at the bottom of the sidebar, press **⌘Q**, or click the menu bar icon and choose **Quit DayFlow**. To silence it without quitting, see [Turning reminders off](#turning-reminders-off).
+DayFlow keeps running after you close its window, and its Dock icon goes until you open the window again. A small **sun-over-water icon** appears in the menu bar, with the minutes left in the current block next to it. To quit, choose **Quit DayFlow** at the bottom of the sidebar, press **⌘Q**, or click the menu bar icon and choose **Quit DayFlow**. To silence it without quitting, see [Turning reminders off](#turning-reminders-off).
 
 ---
 
@@ -76,7 +75,7 @@ The window has a sidebar on the left:
 - **Today**: what's happening now and the rest of today.
 - **Schedule**: your weekly plan of blocks.
 - **Settings**: block types, meetings, sounds, calendar, and general options, each in its own tab.
-- **Switch to: Mini timer / Backstage**: switch to a smaller way of running DayFlow (see [Window modes](#10-window-modes-full-mini-timer-and-backstage)). The key shown underneath, **⌃⌥D**, does the same from anywhere.
+- **Mini timer**: a switch that shows a small floating countdown (see [The window and the Mini timer](#10-the-window-and-the-mini-timer)). The key shown underneath, **⌃⌥D**, opens or closes the window from any app.
 
 DayFlow follows your Mac's light or dark appearance. If you've turned on **Reduce Motion** or **Reduce Transparency** in System Settings → Accessibility, DayFlow drops its animations or translucency to match.
 
@@ -150,7 +149,7 @@ Skipping lasts only for that day: everything is back the next morning. One event
 | **Starts / Ends** | The start and end times. An event has only a time; its Ends shows **—**. |
 | **Name** | What happens. |
 | **Event · Block** | Switches between the two. A block that becomes an event drops its end and its reminders, and rings with its Start sound; switching back restores what it had. |
-| **Type** | A block's type, in the small menu under the name. The type decides the block's reminders (see [Block types](#5-block-types-and-their-reminders)), or choose **Own reminders** to set them for this block alone (see [A block's own reminders](#a-blocks-own-reminders)). **New type…** at the bottom of the menu takes you to Settings → Block types. Events have no type. |
+| **Type** | A block's type, in the small menu under the name. The type decides the block's reminders (see [Block types](#5-block-types-and-their-reminders) and [A block's reminders](#a-blocks-reminders)). **New type…** at the bottom of the menu takes you to Settings → Block types. Events have no type. |
 | **Length** | Worked out for you, for example *2 h 10 min*. |
 | **Reminders ▸** / **Alarm ▸** | Shows the block's reminders, or the event's alarm, under the row. |
 | **Repeats on** | The days of the week, S M T W T F S. Click a day to turn it on or off. |
@@ -162,12 +161,9 @@ Click **＋ Add…** and choose **Event**, **Repeated event…** or **Block**. A
 
 ### Saving
 
-As soon as you change anything, a bar appears at the bottom: **Unsaved changes · Discard · Save schedule**.
+Changes **save as you go**: a moment after you stop typing, or straight away when you click a day, a switch or a menu. Reminders follow at once. Each save shows **Saved · Undo** at the bottom; **Undo** puts the schedule back as it was before that change.
 
-- **Save schedule** saves your changes and updates reminders straight away.
-- **Discard** puts the schedule back to how it was last saved.
-
-DayFlow checks each row before saving. It needs a name, at least one day, and, for a block, an end time after its start time. A row with a problem gets a red outline and a message under it. Overlapping blocks are allowed, but the row tells you which block it overlaps.
+DayFlow checks each row. It needs a name, at least one day and, for a block, an end time after its start time. A row with a problem isn't saved until it's fixed: it gets a red outline and a message under it, and keeps its last saved version meanwhile (a new row isn't saved at all yet). Overlapping blocks are allowed, but the row tells you which block it overlaps.
 
 ### Events
 
@@ -188,7 +184,7 @@ A **repeated event** makes several events at once: *Drink water* every 30 minute
 
 It shows how many events it makes as you type. **Create** then asks first, *Create 17 "Drink water" events?*, with their times, so you can catch a typo. If they'd need more alarms a week than your iPhone sets ahead (48), it says so: open DayFlow on your iPhone at least every couple of days. A repeat can make at most 200 events.
 
-The events go into the schedule like any change; **Save schedule** keeps them. Each one is an event of its own in Today (you check off or skip each time on its own), but they stay tied to their repeat:
+They're saved straight away, like any change. Each one is an event of its own in Today (you check off or skip each time on its own), but they stay tied to their repeat:
 
 - Their rows show **↻** and the rule, *Every 30 min, 9:00 AM – 5:00 PM*, and their time, name and days can't be changed one by one.
 - **Edit repeat…** changes all of them. Saving makes the events again from the new rule (with the same check first): change *Every* from 30 to 45, and the 17 events become 11. Today's checks and skips stay on the times it still has.
@@ -196,19 +192,15 @@ The events go into the schedule like any change; **Save schedule** keeps them. E
 - **×** asks: **Delete all 17 events**, or **Delete only this one**.
 - **Group repeats**, above the list, shows each repeat as one row: *Drink water · 17 events · Every 30 min, 9:00 AM – 5:00 PM*.
 
-### A block's own reminders
+### A block's reminders
 
-Normally a block's reminders come from its [type](#5-block-types-and-their-reminders). To set them for one block alone, choose **Own reminders** at the top of its Type menu. **Reminders ▸** under the row then shows the block's reminder rows, editable: switches, minutes ahead, sounds, Fade in and ▶. They start as a copy of the type's, and from then on later changes to the type don't affect the block. They're saved with **Save schedule**.
+A block's reminders always come from its [type](#5-block-types-and-their-reminders). **Reminders ▸** under the row shows them, read-only (▶ still plays them), with **Edit Focus…** to open the type in Settings. Changing a type changes every block of that type. For a block that should sound different, choose another type, or **New type…** in the Type menu.
 
-With a type chosen, **Reminders ▸** shows that type's settings, read-only (▶ still plays them): *From the Focus type. Change it in Settings → Block types, or choose Own reminders.* Choosing a type for a block with its own reminders asks first, because its own settings are removed. Such blocks show **Own** as their type on Today, in cards and in the menu bar.
+Earlier versions let a block have **Own reminders**. Each such block became a type of its own, named after it (*Run*, or *Run (2)* if that name was taken), with the same reminders.
 
 ### Ring on silent (iPhone)
 
-At the bottom of **Reminders ▸**, **Ring on silent (iPhone)** sets a block to [ring even on silent](#ringing-even-on-silent) on your iPhone, where each of its reminders rings as an alarm. You can set it on the Mac, with a type or with Own reminders, and it travels to the iPhone in export files. It's saved with **Save schedule**, and an alarm clock ⏰ marks the block in the schedule and in Today's flow. Reminders on the Mac don't change: they already play whatever your Mac's Focus, and only the Mac's volume or mute silences them.
-
-### Import, export and backups
-
-The **Import…**, **Export…** and **Backups** buttons at the top are explained in [Export, import and backups](#13-export-import-and-backups).
+At the bottom of **Reminders ▸**, **Ring on silent (iPhone)** sets a block to [ring even on silent](#ringing-even-on-silent) on your iPhone, where each of its reminders rings as an alarm. It's saved straight away, and an alarm clock ⏰ marks the block in the schedule and in Today's flow. Reminders on the Mac don't change: they already play whatever your Mac's Focus, and only the Mac's volume or mute silences them.
 
 ---
 
@@ -218,9 +210,9 @@ Every block has a **type**, and the type decides the block's reminders. Change a
 
 Open **Settings → Block types**. Your types are listed on the left, each with a short summary (for example *Prep 10 min · 3 of 4 on*). Click one to edit it on the right.
 
-### The starter types
+### Default
 
-DayFlow starts with **Default**, **Focus**, **Break**, **Admin** and **Meal**.
+DayFlow starts with one type, **Default**. Add another when you want a block to sound different: a quieter Break, say, or a Focus with an earlier heads-up.
 
 **Default** is special in two ways:
 
@@ -232,6 +224,7 @@ DayFlow starts with **Default**, **Focus**, **Break**, **Admin** and **Meal**.
 - **＋** under the list adds a type called *New type* and selects its name so you can type over it.
 - **Rename a type** by editing the name at the top of its details. Names must be unique (ignoring capitals) and up to 40 characters. Renaming keeps every block that uses the type.
 - **−** deletes the selected type. If blocks use it, DayFlow asks first ("3 blocks use Focus. They'll move to Default.").
+- **New type…** at the bottom of a block's Type menu, in Schedule, takes you here to add one.
 - **"Used by N blocks"** next to the name shows how many blocks use the type.
 
 ### The four reminders
@@ -303,7 +296,7 @@ While reminders are off, nothing rings: no notifications, no sounds, no cards. R
 
 ### Quitting DayFlow
 
-Closing the window doesn't quit DayFlow (see [Window modes](#10-window-modes-full-mini-timer-and-backstage)). To stop it completely, reminders included, use any of:
+Closing the window doesn't quit DayFlow (see [Window modes](#10-the-window-and-the-mini-timer)). To stop it completely, reminders included, use any of:
 
 - **Quit DayFlow** at the bottom of the sidebar;
 - **⌘Q** while the window is in front;
@@ -316,7 +309,7 @@ The first time you quit from the window, DayFlow explains once that reminders st
 
 ## 7. Reminder cards
 
-Alongside each notification, DayFlow shows a **card** at the top right of your screen, like Google Calendar's reminders. Unlike a notification, a card **stays until you deal with it**.
+Each reminder shows as a **card** at the top right of your screen, like Google Calendar's reminders, or as a macOS notification, whichever you choose in **Settings → General → Reminders show as** (Cards is the default). Unlike a notification, a card **stays until you deal with it**, and has Snooze, Join and Done.
 
 - Cards float over full-screen apps and on every desktop (Space).
 - **They never take focus**, so whatever you're typing keeps going.
@@ -338,19 +331,19 @@ Alongside each notification, DayFlow shows a **card** at the top right of your s
 - **Join** opens the meeting's video link. **Open in Calendar** opens the event in Google Calendar.
 - **Clicking the card's text** opens DayFlow's window.
 
-Any button stops the sound. Closing a card also clears its notification from Notification Center, and clicking the notification closes the card.
+Any button stops the sound.
 
 ### Several at once
 
 Up to three cards show at once, newest on top. If more are waiting, the bottom card says **+N more**, and the next one slides into place as you close the others.
 
-### Turning cards off or pausing them
+### Notifications instead, or pausing them
 
-- **Settings → General → Show reminder cards** turns cards off. You still get notifications.
+- **Settings → General → Reminders show as → Notifications** shows macOS notifications instead of cards. They follow Focus and go to Notification Center, without Snooze or Done.
 - **Close cards on their own** can make cards close after **1 min** or **5 min**. The default is **Never**.
 - To stop cards (and everything else) for a while, for example during a presentation, [turn reminders off](#turning-reminders-off) for 1 hour.
 
-macOS doesn't let apps see whether **Focus** or **Do Not Disturb** is on. Notifications respect Focus, but cards can't, so [turn reminders off](#turning-reminders-off) when you need quiet.
+macOS doesn't let apps see whether **Focus** or **Do Not Disturb** is on. Notifications respect Focus, but cards can't, so choose Notifications, or [turn reminders off](#turning-reminders-off), when you need quiet.
 
 ---
 
@@ -362,7 +355,7 @@ Every reminder can use any of DayFlow's 18 built-in sounds, each 4 to 9 seconds 
 
 > Soft bell · Echo bells · Fairy bell · Magic bell · Mystery bells · Magic glitter · Fantasy bells · Flute · Elevator bells · Elegant chime · Airport ding · Classic door bell · Doorbell tone · Hour bells · Class bell · Sleigh bells · Classic alarm · Rooster crowing
 
-Pick sounds per reminder in [Block types](#5-block-types-and-their-reminders), in a block's own reminders, in an event's Alarm ▸, and in [Meetings](#9-meetings-from-google-calendar).
+Pick sounds per reminder in [Block types](#5-block-types-and-their-reminders), in an event's Alarm ▸, and in [Meetings](#9-meetings-from-google-calendar).
 
 ### Several sounds for one reminder
 
@@ -370,7 +363,7 @@ A reminder can have **more than one sound**, so a *Drink water* every 30 minutes
 
 With several checked, the button says *3 sounds, shuffled*, and each time the reminder rings, **one is picked at random, never the one it played last**. ▶ on the reminder row plays a random one of them. Volume and Fade in apply to all of them.
 
-This works for events (repeated ones included) and blocks' reminders, in types and in Own reminders. Meeting reminders keep one sound each. If you remove one of your clips, it drops out of any reminder that had other sounds too; a reminder left with none goes back to its starting sound.
+This works for events (repeated ones included) and blocks' reminders (in their types). Meeting reminders keep one sound each. If you remove one of your clips, it drops out of any reminder that had other sounds too; a reminder left with none goes back to its starting sound.
 
 ### Settings → Sounds
 
@@ -443,19 +436,21 @@ DayFlow uses today's timed events from your main calendar. All-day events, cance
 
 ---
 
-## 10. Window modes: Full, Mini timer and Backstage
+## 10. The window and the Mini timer
 
-DayFlow can run three ways. Switch with the buttons at the bottom of the sidebar, the menu bar icon, or **⌃⌥D** from any app, which cycles **Full → Mini timer → Backstage**.
+### The window
 
-### Full
+The window described in this guide. It opens and closes like any Mac app's window:
 
-The full window described in this guide.
+- **Closing it** doesn't quit DayFlow. DayFlow keeps running in the [menu bar](#11-the-menu-bar-icon), with no window and no Dock icon, and reminders, sounds and cards work exactly as usual.
+- **Open it again** from the menu bar icon (**Open DayFlow**), by opening DayFlow from Applications, with **⌃⌥D** from any app, or by clicking a reminder.
+- **⌃⌥D** opens the window, or closes it if it's in front.
 
-**Closing the full window** doesn't quit DayFlow. It switches to whichever of Mini timer or Backstage you used last, so DayFlow keeps reminding you.
+DayFlow reopens the way you left it: with the window open or closed. If you've set it to open when you log in, it starts with the window closed.
 
 ### Mini timer
 
-A small floating pill that always shows what you're doing:
+Turn on **Mini timer** at the bottom of the sidebar, or in the menu bar icon's menu, for a small floating pill that always shows what you're doing:
 
 - **The current block** and a countdown: minutes and seconds, or hours and minutes with a small *h* when more than an hour is left.
 - **A progress bar** for how far through the block you are.
@@ -466,17 +461,11 @@ A small floating pill that always shows what you're doing:
 Using it:
 
 - **Drag** it anywhere. It remembers the spot, and if that spot is off-screen later (say you unplugged a monitor), it moves back to the top-right corner.
-- **Double-click** it to open the full window.
-- **Right-click** it for **Open full window**, **Switch to Backstage**, **Always on top** (on by default) and **Quit DayFlow**.
+- **Double-click** it to open the window.
+- **Right-click** it for **Open DayFlow**, **Hide Mini timer**, **Always on top** (on by default) and **Quit DayFlow**.
 - It's slightly see-through until you point at it, and it stays visible over full-screen apps and on every desktop.
 
-### Backstage
-
-No window and no Dock icon: DayFlow lives only in the menu bar. Reminders, sounds and cards work exactly as usual. Clicking a block reminder opens the full window for a quick look, and closing it puts you back in Backstage.
-
-### Which mode DayFlow opens in
-
-DayFlow reopens in the mode you left it in. If you've set it to open when you log in, it always starts in Backstage.
+The Mini timer is separate from the window: show it with the window open or closed.
 
 ---
 
@@ -485,7 +474,8 @@ DayFlow reopens in the mode you left it in. If you've set it to open when you lo
 The sun-over-water icon in the menu bar shows the minutes left in the current block (for example *23m*). Its menu has:
 
 - **What's on now**: for example *Deep work, 23 min left*, or *No block right now*.
-- **Full window / Mini timer / Backstage (tray only)**: the current mode is ticked.
+- **Open DayFlow**: opens the window.
+- **Show Mini timer**: ticked while the Mini timer shows.
 - **Turn off reminders ▸ For 1 hour / For 24 hours / Until I turn them on**. While they're off, the icon is crossed out and the menu shows *Reminders off until…* and **Turn on reminders** instead.
 - **Sync calendar now.**
 - **Quit DayFlow.**
@@ -498,71 +488,30 @@ The sun-over-water icon in the menu bar shows the minutes left in the current bl
 
 | Setting | What it does |
 |---|---|
-| **Show reminder cards** | Turns [reminder cards](#7-reminder-cards) on or off. |
-| **Close cards on their own** | *Never* (default), *After 1 min*, or *After 5 min*. |
-| **Send a test reminder** | Shows a card and a notification and plays Default's start sound, so you can check everything works. |
-| **Press ⌃⌥D anywhere…** | Turns the mode-switching shortcut on or off. If another app already uses ⌃⌥D, DayFlow says so and the shortcut stays off. |
-| **Open DayFlow when I log in** | Starts DayFlow, in Backstage, every time you log in. |
+| **Reminders show as** | **Cards** (default): [reminder cards](#7-reminder-cards) that stay until you act. **Notifications**: macOS notifications, which follow Focus. |
+| **Close cards on their own** | *Never* (default), *After 1 min*, or *After 5 min*. Shown with Cards. |
+| **Send a test reminder** | Shows a reminder the way you chose and plays Default's start sound, so you can check everything works. |
+| **Press ⌃⌥D anywhere…** | Turns the open-or-close-the-window shortcut on or off. If another app already uses ⌃⌥D, DayFlow says so and the shortcut stays off. |
+| **Open DayFlow when I log in** | Starts DayFlow, with the window closed, every time you log in. |
 
 ---
 
-## 13. Export, import and backups
-
-### Export
-
-**Schedule → Export…** saves a `.json` file containing:
-
-- your events and blocks, with each event's alarm and repeat, any block's own reminders, whether it rings even on silent, and every sound of reminders with several;
-- the block types they use, with all four reminders each;
-- your Meetings reminders and volume;
-- any of your own sound clips those reminders use (built into the file, so it works on another Mac).
-
-It **never** includes your Google sign-in, or what you've checked off and skipped. Files from this version (version 5, with events, repeats and several sounds per reminder) need an up-to-date DayFlow to import; an older version says *"That file was made by a newer version of DayFlow."* Older files still import. Use exports to back up your plan, move it to another Mac, or share a schedule with someone.
-
-### Import
-
-**Schedule → Import…** shows a preview before anything changes:
-
-- *This will replace your 8 blocks with 6 blocks from file.json*, followed by the incoming blocks with their times, types and days.
-- Any new types the file adds, for example *Adds 1 new block type: Deep reading*.
-- **Also apply reminder and sound settings from this file**, on by default. Turn it off to keep your own reminders and sounds and take only the blocks.
-- Anything that can't be used, for example a sound clip that's damaged or too long. Those reminders fall back to their starting sound.
-- A warning if you have unsaved schedule changes, which the import would replace.
-
-Click **Replace schedule** to import, or **Cancel**.
-
-How the file's types are matched to yours:
-
-- **The file's Default always matches your Default**, even if either has been renamed.
-- Other types match **by name**, ignoring capitals. A type you already have keeps your reminders unless the settings switch is on. A type you don't have is added.
-- Your other types are left alone.
-
-Files from earlier versions of DayFlow import too; they're converted automatically.
-
-### Backups and undo
-
-Before every import, DayFlow saves your current schedule, types and settings to its **backups** folder, keeping the newest ten. **Schedule → Backups** opens that folder in Finder.
-
-**To undo an import**, import the most recent backup with the settings switch on. That restores your schedule and puts your block types back exactly as they were.
-
----
-
-## 14. Your data
+## 13. Your data
 
 DayFlow keeps everything in `~/Library/Application Support/Dayflow` on your Mac. In Finder, choose **Go → Go to Folder…** and paste that path.
 
 | File or folder | What's in it |
 |---|---|
-| `schedule.json` | Your blocks |
+| `schedule.json` | Your events and blocks |
 | `block-types.json` | Your block types and their reminders |
 | `settings.json` | Meetings reminders, volume, and other preferences |
 | `sounds.json` | The list of your sound clips (the clips themselves are in **Music → DayFlow Clips**) |
-| `backups/` | Backups taken before each import or upgrade |
-| `window-state.json` | Your last mode and where the mini timer sits |
+| `progress.json` | What you've checked off and skipped, and each day's result for your streak |
+| `window-state.json` | Whether the window and the Mini timer were open, and where the Mini timer sits |
 | `google-credentials.json` | The Google client file you imported |
 | `google-token.json` | Your Google sign-in; **Disconnect** deletes it |
 
-**Upgrading DayFlow** keeps your data. If a new version changes how something is stored, DayFlow first saves your old setup to `backups/`, then converts it, so nothing you hear or see changes unexpectedly.
+**Upgrading DayFlow** keeps your data. If a new version changes how something is stored, DayFlow converts it, so nothing you hear or see changes unexpectedly. Your Mac and iPhone each keep their own schedule; there's no way to move one to the other yet.
 
 **Your clips** are in **Music → DayFlow Clips**, outside that folder, so you can manage them in Finder. Clips from earlier versions (in `sounds/`) move there by themselves the first time this version opens.
 
@@ -570,28 +519,28 @@ DayFlow keeps everything in `~/Library/Application Support/Dayflow` on your Mac.
 
 ---
 
-## 15. Troubleshooting
+## 14. Troubleshooting
 
 **macOS says DayFlow can't be opened or can't be verified.**
 The beta isn't notarized by Apple yet. Use **Open Anyway** in System Settings → Privacy & Security, as in [Install](#install-it). It's needed once per install.
 
 **No notifications appear.**
-Check **System Settings → Notifications → DayFlow** and make sure notifications are allowed, and that **Focus / Do Not Disturb** is off. Reminder cards appear even when notifications are off.
+If **Reminders show as** is **Notifications**, check **System Settings → Notifications → DayFlow** and make sure notifications are allowed, and that **Focus / Do Not Disturb** is off. Cards appear even when notifications aren't allowed.
 
 **No sound.**
 Check **Settings → Sounds**: *Play a sound with each reminder* must be on and the volume above zero. Also check your Mac's volume and output device. Each reminder's own switch must be on, and its sound will play when you pick it in the menu.
 
 **A reminder didn't come.**
-Check that the block repeats on today in Schedule, that you clicked **Save schedule**, and that the reminder is switched on for the block's type. Remember a heads-up is skipped for blocks shorter than the heads-up time.
+Check that the block repeats on today in Schedule, that it isn't outlined in red (a row with a problem isn't saved), that it isn't skipped today, and that the reminder is switched on for the block's type. Remember a heads-up is skipped for blocks shorter than the heads-up time.
 
 **⌃⌥D doesn't do anything.**
-Another app may be using that shortcut. Settings → General says so if it is; switch modes from the sidebar or the menu bar icon instead.
+Another app may be using that shortcut. Settings → General says so if it is; open the window from the menu bar icon instead.
 
 **I only see a small floating timer.**
-That's the Mini timer. Double-click it for the full window.
+That's the Mini timer. Double-click it to open the window, or right-click it → **Hide Mini timer**.
 
 **I can't find DayFlow.**
-In Backstage, DayFlow has no window or Dock icon. Click the sun icon in the menu bar.
+With its window closed, DayFlow has no Dock icon. Click the sun icon in the menu bar → **Open DayFlow**.
 
 **Google Calendar says access has expired.**
 Click **Connect** in Settings → Calendar to sign in again. To stop it happening every 7 days, publish your Google consent screen, as described in [Connect your calendar](#connect-your-calendar-one-time-about-5-minutes).
@@ -601,12 +550,13 @@ Only one copy of DayFlow runs at a time; opening it again brings the running cop
 
 ---
 
-## 16. Quick reference
+## 15. Quick reference
 
 | To… | Do this |
 |---|---|
 | See what's on now | **Today**, the Mini timer, or the menu bar icon |
-| Plan your week | **Schedule**, then **Save schedule** |
+| Plan your week | **Schedule** (changes save as you go; **Undo** in the message) |
+| See an example | **Add a sample day** on the empty Today or Schedule |
 | Add something that rings once | **Schedule → ＋ Add… → Event** |
 | Add an event every 30 minutes | **Schedule → ＋ Add… → Repeated event…** |
 | Check an event off | Its check in **Today's flow**, or **✓ Done** on its card |
@@ -618,17 +568,17 @@ Only one copy of DayFlow runs at a time; opening it again brings the running cop
 | Make a sound gentler | Press **Fade in** next to it |
 | Snooze a reminder | **Snooze ▾** on its card |
 | Silence DayFlow for a while | **Turn off reminders…** on Today, or in the menu bar icon's menu |
-| Switch Full / Mini / Backstage | **⌃⌥D**, the sidebar, or the menu bar icon |
+| Open or close the window | **⌃⌥D**, or the menu bar icon → **Open DayFlow** |
+| Show the Mini timer | **Mini timer** at the bottom of the sidebar, or in the menu bar icon's menu |
+| Cards or notifications | **Settings → General → Reminders show as** |
 | Get reminders for meetings | **Settings → Calendar**, then **Settings → Meetings** |
-| Back up or share your plan | **Schedule → Export…** |
-| Undo an import | **Schedule → Backups**, then import the newest backup |
 | Quit | **Quit DayFlow** in the sidebar, **⌘Q**, or menu bar icon → **Quit DayFlow** |
 
 ---
 
-## 17. DayFlow on iPhone
+## 16. DayFlow on iPhone
 
-DayFlow for iPhone is the same day planner, built for the phone: the same block types and four reminders, the same sounds, and the same export files. Some things work differently, because iOS runs apps differently from macOS. This section covers what's different. It needs **iOS 17 or later**.
+DayFlow for iPhone is the same day planner, built for the phone: the same block types and four reminders, the same sounds, and the same kinds of data files. The iPhone keeps its own schedule: plan it there, or add the sample day. Some things work differently, because iOS runs apps differently from macOS. This section covers what's different. It needs **iOS 17 or later**.
 
 ### Install it (beta)
 
@@ -648,7 +598,7 @@ If Xcode can't sign the **App Groups** capability with your free Apple ID, delet
 
 ### The first time you open it
 
-DayFlow asks how to start your schedule: with the **sample weekday schedule** (the same eight blocks as the Mac), **from a file** (an export AirDropped or saved from your Mac), or **empty**. Then it explains its reminders and asks to send notifications. If you choose **Not now**, Today shows *Reminders are off* until you allow notifications in iOS Settings.
+DayFlow explains its events and blocks, then asks to send notifications. If you choose **Not now**, Today shows *Reminders are off* until you allow notifications in iOS Settings.
 
 ### Around the app
 
@@ -657,17 +607,18 @@ Three tabs at the bottom:
 | Tab | What's there |
 |---|---|
 | **Today** | The dial, the current block with its countdown, **Turn off reminders…**, today's done count and streak, and today's flow, with checks for events and meetings' **Join** buttons |
-| **Schedule** | Your weekly plan as a **List** or one **Day** at a time. **＋** adds an event, a repeated event or a block; **⋯** has **Import…**, **Export…** and **Backups** |
+| **Schedule** | Your weekly plan as a **List** or one **Day** at a time. **＋** adds an event, a repeated event or a block |
 | **Settings** | **Block types**, **Meetings**, **Sounds**, **Calendars** and **General** |
 
 ### Planning your blocks
 
 **List** shows every event and block, earliest first: events with a bell 🔔, blocks with a bar, with each one's type, days and length. The day strip (**All · M T W T F S S**) shows one day's.
 
+- On an empty schedule, **Add a sample day** (in Today and in Schedule) adds the eight sample weekday blocks.
 - **＋** asks what to add: **Event**, **Repeated event** or **Block**. A new event or block follows the Mac's rule: it starts where your latest one ends and copies its days (a block lasts 30 minutes and takes its type).
-- **Tap an event or block** to edit it. **Event · Block** at the top switches between them, as on the Mac. **Save** applies the change straight away and updates reminders. There's no separate Save schedule step.
+- **Tap an event or block** to edit it. **Event · Block** at the top switches between them, as on the Mac. **Save** applies the change straight away and updates reminders, with **Undo** in the message.
 - An **event** has a name, a time, its days and its **Alarm**: the sound (or [several](#several-sounds-for-one-reminder)) and Fade in. It always rings as an alarm, through silent mode and Focus. The first event you save asks whether DayFlow may set alarms. See [Ringing even on silent](#ringing-even-on-silent).
-- A **block** has a type, start and end times, days and its four **Reminders**. **Ring even on silent**, at the top of **Reminders**, makes each of them ring as an alarm. **Own reminders**, at the top of the Type menu, makes the **Reminders** section editable for this block alone, starting from its type's settings; with a type, the section shows that type's reminders, read-only. Choosing a type again asks first. See [A block's own reminders](#a-blocks-own-reminders).
+- A **block** has a type, start and end times, days and its four **Reminders**. **Ring even on silent**, at the top of **Reminders**, makes each of them ring as an alarm. Below it, **From the Focus type** sums up the type's reminders; tap it to open the type and change them (for every block of that type). See [A block's reminders](#a-blocks-reminders).
 - **Save** stays greyed out until it has a name, repeats on at least one day and, for a block, ends after it starts. Overlapping blocks are allowed; the block shows which one it overlaps.
 - **Swipe left** to delete. **Undo** appears for a few seconds.
 - **New type…** in the Type menu adds a block type and opens its reminders.
@@ -759,20 +710,13 @@ If a meeting moves while DayFlow isn't running, its reminder keeps the old time 
 - **Live Activity:** while a block is running, DayFlow shows it on the Lock Screen and in the Dynamic Island, with its type, the time left, a progress bar and what's next. When the block ends, it shows *Up next* until DayFlow runs again and moves it on. Turn it off in **Settings → General**. The first time, iOS asks whether to allow DayFlow's Live Activities.
 - **Widgets:** add **DayFlow → Current block** to the Home Screen (small or medium) or the Lock Screen. Widgets show the current block and its countdown, and switch blocks by themselves through the day. They need the App Groups capability; if your free Apple ID can't sign it, the widgets say *Open DayFlow*.
 
-### Moving your schedule between Mac and iPhone
+### Mac and iPhone
 
-The iPhone and Mac use the **same export files**, and each keeps its own schedule, with no automatic sync.
+The Mac and the iPhone each keep their own schedule, types and checks; changes on one don't reach the other. Syncing between them is planned for a later version.
 
-- **Mac → iPhone:** on the Mac, **Schedule → Export…**, then AirDrop the file to the iPhone, or save it to iCloud Drive. On the iPhone, open the file with **DayFlow** (if a preview opens first, tap the share button and choose DayFlow), or use **Schedule → ⋯ → Import…**. You see the same preview as on the Mac before anything changes.
-- **iPhone → Mac:** **Schedule → ⋯ → Export…** opens the share sheet. AirDrop the file to your Mac, then use **Import…** there.
+### Your data on iPhone
 
-The file's Default type matches your Default, other types match by name, and clips travel inside the file, exactly as on the Mac. Settings that only exist on one device (the Mac's shortcut and card options; the iPhone's Live Activity and calendars) aren't in the file and stay as they are.
-
-### Backups and your data on iPhone
-
-Before every import, DayFlow keeps a backup, the newest 10. Find them in **Schedule → ⋯ → Backups**: tap one to see what restoring it would change, or share it to send it to your Mac. They're also in the **Files** app, under **On My iPhone → DayFlow → Backups**.
-
-Your clips are in **On My iPhone → DayFlow → Clips**. Your schedule, types and settings live in DayFlow's own storage on the iPhone, in the same file formats as the Mac's. Deleting the app deletes all of it, Clips folder included, so export first if you want to keep your plan.
+Your clips are in **On My iPhone → DayFlow → Clips**. Your schedule, types and settings live in DayFlow's own storage on the iPhone, in the same file formats as the Mac's. Deleting the app deletes all of it, Clips folder included.
 
 ### iPhone troubleshooting
 

@@ -1,6 +1,6 @@
 # DayFlow for iPhone
 
-A native SwiftUI version of DayFlow for iOS 17 or later. It shares the Mac app's data model, reminder rules and export format, so schedules move between the two as files. The [User Guide](../User%20Guide.md#17-dayflow-on-iphone) explains how it works for people using it; this page is for building it.
+A native SwiftUI version of DayFlow for iOS 17 or later. It shares the Mac app's data model and reminder rules; each keeps its own schedule. The [User Guide](../User%20Guide.md#17-dayflow-on-iphone) explains how it works for people using it; this page is for building it.
 
 ## Build and run
 
@@ -18,7 +18,7 @@ If your Apple ID can't sign the App Groups capability, remove the `com.apple.sec
 
 ## Tests
 
-- `swift test` in `Packages/DayFlowCore` runs the core tests on the Mac, no Simulator needed: the planner's wording and merge rules against the Mac's, the rolling window, editing rules, cleaning, import and export (including a Mac export and version 1 files), backups and clips.
+- `swift test` in `Packages/DayFlowCore` runs the core tests on the Mac, no Simulator needed: the planner's wording and merge rules against the Mac's, the rolling window, editing rules, cleaning, clips, and turning old Own reminders into types.
 - **Product → Test** in Xcode (or `xcodebuild test -scheme DayFlow -destination 'platform=iOS Simulator,name=iPhone 17'`) runs the UI tests in the Simulator: the welcome screens and notification prompt, scheduling, the test notification, the edit sheet's checks with Undo, the day view's tap, drag, resize and "This day only", the Live Activity, meetings from the calendar, every Settings page, and your own clips (the Clips folder, Choose 30 seconds, the recorder, Rename and Remove). Each test relaunches DayFlow if the Simulator hands it a copy already running without the test's launch options.
 
 ## How it's put together
@@ -28,13 +28,13 @@ project.yml                       XcodeGen project: the app, the widget extensio
 Packages/DayFlowCore/             the parts that don't need iOS, tested with `swift test`
   Models.swift                    Block, BlockType, Reminder, Settings…, shaped like the Mac's JSON
   Specs.swift                     starting values, built-in sounds, the sample schedule
-  Sanitize.swift                  the Mac's cleaning rules, and the version 1 upgrade
+  Sanitize.swift                  the Mac's cleaning rules, and Own reminders becoming types
   Planner.swift                   reminders for a day (wording and merge rules), the rolling window,
                                   which of several sounds rings, today's result and the streak
   ScheduleEdits.swift             checks, ＋ rules, events ↔ blocks, repeats, moving and resizing,
                                   "This day only", day-view columns
-  DayProgress.swift               checks and skips by day (progress.json, never exported), SoundPick
-  DataStore.swift, Import.swift   files, clips, backups, export and import
+  DayProgress.swift               checks and skips by day (progress.json, this device only), SoundPick
+  DataStore.swift                 files, clips, the sample day
   ClipFolder.swift                the Clips folder: scanning, renames, long files, Originals
 DayFlow/                          the app
   AppModel.swift                  state for every screen; refreshes reminders after each change
@@ -48,8 +48,8 @@ DayFlow/                          the app
   Sound/SoundPlayer.swift         previews (they play on silent)
   Sound/AudioEdit.swift           trimming silence, 30-second pieces, writing m4a
   Views/Settings/ClipSheets.swift the recorder and Choose 30 seconds
-  Views/                          Today (dial, timeline), Schedule (list, day grid, edit sheet,
-                                  import, backups), Settings, Welcome
+  Views/                          Today (dial, timeline), Schedule (list, day grid, edit sheets),
+                                  Settings, Welcome
 DayFlowWidgets/                   Live Activity (Lock Screen, Dynamic Island) and widgets
 Shared/                           types used by the app and the widgets
 DayFlowUITests/                   UI tests run in the Simulator

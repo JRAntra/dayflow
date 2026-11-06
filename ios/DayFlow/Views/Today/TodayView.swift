@@ -92,8 +92,15 @@ struct NowReadout: View {
                 Text(model.blocks.isEmpty ? "Add events and the blocks of your day to get reminders."
                      : "Nothing repeats on \(ScheduleEdits.dayNames[Calendar.current.component(.weekday, from: now) - 1])s, or you've skipped it all.")
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                Button("Plan your day") { model.tab = .schedule }
-                    .buttonStyle(.borderedProminent).controlSize(.small).padding(.top, 4)
+                if model.blocks.isEmpty {
+                    Button("Add a sample day") { model.addSampleDay() }
+                        .buttonStyle(.borderedProminent).controlSize(.small).padding(.top, 4)
+                        .accessibilityIdentifier("add-sample-day")
+                    Button("Plan your own") { model.tab = .schedule }.font(.caption)
+                } else {
+                    Button("Plan your day") { model.tab = .schedule }
+                        .buttonStyle(.borderedProminent).controlSize(.small).padding(.top, 4)
+                }
             } else if let current {
                 TypeBadge(name: model.typeName(for: current.block))
                 Text(current.title).font(.headline).multilineTextAlignment(.center).lineLimit(2)
@@ -111,7 +118,7 @@ struct NowReadout: View {
                 Text("Everything has finished.").font(.caption).foregroundStyle(.secondary)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain) // its buttons stay reachable
     }
 
     func countdown(_ seconds: TimeInterval) -> some View {

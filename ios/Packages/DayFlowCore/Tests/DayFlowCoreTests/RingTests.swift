@@ -53,7 +53,7 @@ import Testing
         #expect(w.reminders.filter(\.alarm).count == 3)
     }
 
-    @Test func savedOnlyWhenOnAndTravelsInExports() throws {
+    @Test func savedOnlyWhenOn() throws {
         let a = tempStore()
         try a.saveBlocks(schedule(ringing: ["b4"]))
         #expect(a.blocks.first { $0.id == "b4" }?.ringsOnSilent == true)
@@ -63,12 +63,6 @@ import Testing
         #expect(file.components(separatedBy: "ringOnSilent").count == 2) // only Lunch has the key
         a.load()
         #expect(a.blocks.first { $0.id == "b4" }?.ringsOnSilent == true)
-
-        let export = a.exportPayload()
-        #expect(export["dayflowExport"] == .number(5))
-        let b = tempStore()
-        try b.applyImport(try b.readImport(try JSONFile.encode(export), fileName: "x.json"), applySettings: false)
-        #expect(b.blocks.filter(\.ringsOnSilent).map(\.id) == ["b4"])
     }
 
     @Test func readsTheMacsTruthiness() throws {

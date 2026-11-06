@@ -45,11 +45,9 @@ public enum ScheduleEdits {
         var out = b
         if toEvent {
             guard !b.isEvent else { return b }
-            let start = b.hasOwnReminders ? (b.reminders ?? Specs.startingTypeReminders).start
-                : (types.first { $0.id == b.type } ?? types.first(where: \.isDefault))?.reminders.start ?? Specs.startingEventAlert
+            let start = (types.first { $0.id == b.type } ?? types.first(where: \.isDefault))?.reminders.start ?? Specs.startingEventAlert
             out.end = ""
             out.type = Specs.eventType
-            out.reminders = nil
             out.ringOnSilent = nil
             out.alert = eventAlert(from: start)
         } else {
@@ -157,7 +155,7 @@ public enum ScheduleEdits {
         // A block that ends at 23:59 leaves no room after it; start 30 minutes earlier instead.
         let startMin = endMin <= s ? max(0, endMin - 30) : s
         return Block(title: "", start: HHMM.string(startMin), end: HHMM.string(endMin),
-                     days: last?.days ?? Specs.weekdays, type: last.map(blockType) ?? Specs.defaultType, reminders: last?.reminders)
+                     days: last?.days ?? Specs.weekdays, type: last.map(blockType) ?? Specs.defaultType)
     }
 
     /// Tapping an empty slot in the day view: a 30-minute block there on that day, with the type
@@ -167,7 +165,7 @@ public enum ScheduleEdits {
         let endMin = min(startMin + 30, 23 * 60 + 59)
         let before = blocks.filter { $0.days.contains(day) && $0.endMin <= startMin }.max { $0.endMin < $1.endMin }
         return Block(title: "", start: HHMM.string(startMin), end: HHMM.string(endMin),
-                     days: before?.days ?? [day], type: before.map(blockType) ?? Specs.defaultType, reminders: before?.reminders)
+                     days: before?.days ?? [day], type: before.map(blockType) ?? Specs.defaultType)
     }
 
     /// The type a new block copies from `b`: an event has none, so Default.

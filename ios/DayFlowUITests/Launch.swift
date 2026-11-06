@@ -34,11 +34,15 @@ extension XCUIApplication {
         for _ in 0..<6 where !apps.isHittable { settings.swipeUp() }
         apps.tap()
         let dayflow = settings.staticTexts["DayFlow"]
+        // The Apps list is long and alphabetical: scroll to DayFlow, or search for it.
         if !dayflow.waitForExistence(timeout: 5) || !dayflow.isHittable {
+            for _ in 0..<8 where !(dayflow.exists && dayflow.isHittable) { settings.swipeUp(velocity: .slow) }
+        }
+        if !(dayflow.exists && dayflow.isHittable) {
             let search = settings.searchFields.firstMatch
             if search.waitForExistence(timeout: 3) { search.tap(); search.typeText("DayFlow") }
         }
-        XCTAssertTrue(dayflow.waitForExistence(timeout: 5))
+        XCTAssertTrue(dayflow.waitForExistence(timeout: 8))
         dayflow.tap()
         let alarms = settings.switches.matching(NSPredicate(format: "label CONTAINS 'Alarm'")).firstMatch
         XCTAssertTrue(alarms.waitForExistence(timeout: 5), "DayFlow's settings should have Alarms")

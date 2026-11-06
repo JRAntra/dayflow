@@ -38,6 +38,12 @@ struct BlockListView: View {
                 } description: {
                     Text(model.blocks.isEmpty ? "Add events and the blocks of your day with ＋."
                          : "None of your events or blocks repeat on that day.")
+                } actions: {
+                    if model.blocks.isEmpty {
+                        Button("Add a sample day") { model.addSampleDay() }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("add-sample-day")
+                    }
                 }
                 .listRowBackground(Color.clear)
             }

@@ -72,7 +72,7 @@ import Testing
     @Test func switchingBetweenEventAndBlock() {
         let b = Specs.sampleSchedule()[1] // Deep work, Default
         let e = ScheduleEdits.switched(b, toEvent: true, types: Specs.starterTypes())
-        #expect(e.isEvent && e.type == "event" && e.reminders == nil && e.alert?.sound == Specs.spec(TypeReminderKey.start).sound)
+        #expect(e.isEvent && e.type == "event" && e.alert?.sound == Specs.spec(TypeReminderKey.start).sound)
         let back = ScheduleEdits.switched(e, toEvent: false, types: Specs.starterTypes())
         #expect(!back.isEvent && back.end == "09:50" && back.type == "default" && back.alert == nil)
         let late = ScheduleEdits.switched(.event(title: "L", start: "23:50", days: [1], alert: Specs.startingEventAlert),
@@ -127,14 +127,13 @@ import Testing
         #expect(p.since == "2026-11-2")
     }
 
-    @Test func progressIsSavedButNeverExported() throws {
+    @Test func progressIsSaved() throws {
         let s = tempStore()
         var p = DayProgress()
         p.setDone("b1", true, day: "2026-11-2")
         try s.saveProgress(p)
         s.load()
         #expect(s.progress.isDone("b1", on: "2026-11-2"))
-        #expect(s.exportPayload().object?.keys.contains { $0.lowercased().contains("progress") } == false)
     }
 
     // MARK: The streak
@@ -243,7 +242,7 @@ import Testing
 
     @Test func removingAClipFromAListKeepsTheRest() throws {
         let s = tempStore()
-        try s.startSchedule(sample: false)
+        try s.startSchedule()
         let clip = try s.installClip(name: "Ding", ext: "mp3", data: Data([1, 2]))
         var alert = Specs.startingEventAlert
         alert.choices = [clip.soundId, "class-bell"]
@@ -255,23 +254,5 @@ import Testing
         s.load()
         #expect(s.blocks.first { $0.id == "a" }?.alert?.choices == ["class-bell"])
         #expect(s.blocks.first { $0.id == "b" }?.alert?.choices == [Specs.eventSpec.sound])
-    }
-
-    @Test func eventsAndTheirClipsTravelInExports() throws {
-        let a = tempStore()
-        try a.startSchedule(sample: false)
-        let clip = try a.installClip(name: "Ding", ext: "mp3", data: Data([3, 3]))
-        var alert = Specs.startingEventAlert
-        alert.choices = ["class-bell", clip.soundId]
-        try a.saveBlocks(ScheduleEdits.makeRepeat(title: "Water", days: [1], alert: alert, rule: water))
-        let export = a.exportPayload()
-        #expect(export["dayflowExport"] == .number(5) && export["clips"]?.array?.count == 1)
-        let b = tempStore()
-        try b.startSchedule(sample: false)
-        let preview = try b.readImport(try JSONFile.encode(export), fileName: "x.json")
-        #expect(preview.blocks.first?.typeName == "Repeated event")
-        try b.applyImport(preview, applySettings: false)
-        #expect(b.blocks.count == 17 && b.blocks.allSatisfy { $0.series == water && $0.type == "event" })
-        #expect(b.blocks[0].alert?.choices == ["class-bell", clip.soundId] && b.clips.count == 1)
     }
 }

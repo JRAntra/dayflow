@@ -4,9 +4,9 @@ A local desktop app for running your day in blocks. You set up the phases of you
 
 Everything stays on your computer. The only network traffic is to Google, and only if you connect your calendar.
 
-**New to DayFlow?** The [User Guide](User%20Guide.md) walks through every feature, from installing to reminder cards and backups.
+**New to DayFlow?** The [User Guide](User%20Guide.md) walks through every feature, from installing to reminder cards.
 
-**On iPhone:** a native SwiftUI version lives in [`ios/`](ios/README.md), for iOS 17 or later. It has the same block types, reminders, sounds and export files, with a day view you can drag, a Lock Screen Live Activity and widgets. It's a beta you install from Xcode; see [DayFlow on iPhone](User%20Guide.md#17-dayflow-on-iphone).
+**On iPhone:** a native SwiftUI version lives in [`ios/`](ios/README.md), for iOS 17 or later. It has the same block types, reminders and sounds, with its own schedule, with a day view you can drag, a Lock Screen Live Activity and widgets. It's a beta you install from Xcode; see [DayFlow on iPhone](User%20Guide.md#17-dayflow-on-iphone).
 
 ## Install (macOS)
 
@@ -45,23 +45,21 @@ The styling is a small design system in plain CSS: `src/renderer/tokens.css` hol
 
 ## Reminder cards
 
-Alongside each macOS notification, DayFlow shows a card at the top right of your screen, like Google Calendar's reminders. It floats over full-screen apps and on every Space, stays until you act on it, and never takes focus from what you're typing.
+Each reminder shows as a card at the top right of your screen, like Google Calendar's reminders, or as a macOS notification: **Settings → General → Reminders show as** chooses (Cards by default). A card floats over full-screen apps and on every Space, stays until you act on it, and never takes focus from what you're typing.
 
 - **Start preparation** and **Heads-up**: *Snooze* (1, 5 or 10 minutes, offering only times that still come before the moment it's warning about) and *Got it*. A snoozed card comes back with an updated title ("In 2 min: Coffee break").
 - **Start** and **Time's up**: *Got it*.
 - **Meetings**: *Join* when there's a Meet link, otherwise *Open in Calendar*; *Snooze* on the "before" reminder; and *Got it*.
+- **Events**: *Got it* and *Done*, which checks the event off and shows the cheer-up.
 
-Clicking a card's text opens the full window. Any button stops the sound, and clearing a card clears its notification (and the other way round). Up to three cards show at once, newest on top, with "+N more" on the bottom one.
+Clicking a card's text opens the window. Any button stops the sound. Up to three cards show at once, newest on top, with "+N more" on the bottom one.
 
-**Settings → General** turns cards off (you'll still get notifications) or has them close on their own after 1 or 5 minutes. **Send a test reminder** shows one. macOS doesn't let apps see Focus or Do Not Disturb, so **Turn off reminders** (or turn cards off) when you don't want them.
+**Settings → General** can have cards close on their own after 1 or 5 minutes. **Send a test reminder** shows one. macOS doesn't let apps see Focus or Do Not Disturb, so choose Notifications, or **Turn off reminders**, when you don't want cards.
 
-## Three ways to run it
+## The window, the Mini timer and the menu bar
 
-- **Full**: the main window, with today's dial, the schedule editor and settings.
-- **Mini timer**: a small floating pill showing the current block, a countdown, a progress bar and what's next (or "Meeting in 4 min" when a meeting comes first). It turns amber during your heads-up minutes. It stays on top of other windows, including full-screen apps and every Space. Drag it anywhere and it reopens there; if that spot is off-screen it snaps back to the top-right corner. Double-click it for the full window; right-click for Backstage, "Always on top" and Quit.
-- **Backstage**: no window and no Dock icon, just the tray (reminder cards still appear). Reminders and sounds work as usual, and the tray menu shows what's on now and switches modes. Clicking a block reminder opens the full window for a look; closing it puts you back in Backstage.
-
-Switch with the buttons at the bottom of the side rail, the tray menu, or **⌃⌥D** (Ctrl+Alt+D on Windows and Linux), which cycles Full → Mini → Backstage from any app. The shortcut can be turned off in Settings → General. Closing the full window takes you to whichever of Mini or Backstage you used last. DayFlow reopens in the mode you left it in, except that opening at login always starts in Backstage.
+- **The window**: today's dial, the schedule editor and settings. Closing it doesn't quit DayFlow: it keeps running in the menu bar (the tray), with no Dock icon until you open the window again. Reminders and sounds work as usual, and the tray menu shows what's on now, opens the window, and shows or hides the Mini timer. **⌃⌥D** (Ctrl+Alt+D on Windows and Linux) opens or closes the window from any app; it can be turned off in Settings → General. DayFlow reopens with the window open or closed as you left it, and starts with it closed when it opens at login.
+- **Mini timer**: a small floating pill showing the current block, a countdown, a progress bar and what's next (or "Meeting in 4 min" when a meeting comes first). It turns amber during your heads-up minutes. It stays on top of other windows, including full-screen apps and every Space. Drag it anywhere and it reopens there; if that spot is off-screen it snaps back to the top-right corner. Show it with the **Mini timer** switch at the bottom of the sidebar or in the tray menu, with the window open or closed. Double-click it to open the window; right-click for "Hide Mini timer", "Always on top" and Quit.
 
 ## What you get reminded about
 
@@ -92,25 +90,21 @@ A sound plays once. A new reminder cuts off one still playing, and clicking the 
 
 ## Block types
 
-**Settings → Block types** lists your types on the left; select one to edit its name and four reminders on the right (each with a switch, a − 5 + stepper for the minutes where it comes early, and a sound menu with ▶). It starts with Default, Focus, Break, Admin and Meal; **＋** and **−** under the list add and delete. Add, rename or delete them as you like (names must be unique). **Default** is special in two ways: it can be renamed and changed but never deleted, and it's where blocks go when they have nowhere else. New blocks get Default unless they copy the type of the block above, and deleting a type moves its blocks to Default (DayFlow asks first).
+**Settings → Block types** lists your types on the left; select one to edit its name and four reminders on the right (each with a switch, a − 5 + stepper for the minutes where it comes early, and a sound menu with ▶). It starts with just Default; **＋** and **−** under the list add and delete. Add, rename or delete them as you like (names must be unique). **Default** is special in two ways: it can be renamed and changed but never deleted, and it's where blocks go when they have nowhere else. New blocks get Default unless they copy the type of the block above, and deleting a type moves its blocks to Default (DayFlow asks first).
 
 New types start with preparation off (5 min, Marimba), start on (Rising), heads-up on (5 min, Soft note) and time's up on (Falling).
 
-Pick a block's type from the small dropdown under its name in the schedule; **New type…** at the bottom jumps to Settings. Today's flow shows each block's type under its name, and the mini timer uses it too: it turns amber during the current block's heads-up minutes, and says **Get ready** in free time once the next block's preparation window opens.
+Pick a block's type from the small dropdown under its name in the schedule; **New type…** at the bottom jumps to Settings. A block's reminders are always its type's: **Reminders ▸** under the row shows them, read-only, with a link to edit the type. (Blocks that had their own reminders in earlier versions become types of their own, named after the block.) Today's flow shows each block's type under its name, and the mini timer uses it too: it turns amber during the current block's heads-up minutes, and says **Get ready** in free time once the next block's preparation window opens.
 
-**Upgrading from an earlier version.** The first time the new version starts, it saves your old setup to `backups/`, then builds a Default type from your old global sounds and "warn me before a block ends" minutes, resolves any "Same as default" sounds in your other types, moves blocks without a type to Default, and gives Meetings your old meeting lead time and sound. Nothing you hear changes.
+**Upgrading from an early version.** The first time the new version starts, it builds a Default type from your old global sounds and "warn me before a block ends" minutes, resolves any "Same as default" sounds in your other types, moves blocks without a type to Default, and gives Meetings your old meeting lead time and sound. Nothing you hear changes.
 
-Besides blocks there are **events**, with only a time (Schedule → ＋ Add… → Event): an event rings once, with its own sound, shows as a dot on the dial, and is never merged with block reminders. A **repeated event** makes several at once (*Drink water* every 30 minutes from 9:00 to 5:00 is 17 events), checked before they're made and edited together through their repeat. In Today, you **check off** events as you do them (a cheer-up pops up, and done events turn gold, with a streak for days at least 80% done) and can **skip** any event or block for the day with its switch. A reminder can have **several sounds**, one picked at random each time, never the same twice in a row. A block can also have **Own reminders** (first in its Type menu) instead of a type's. On iPhone, events always ring as alarms (iOS 26 and later), through the silent switch and Focus, until you tap Stop or Done, and a block can **ring even on silent** too (Reminders ▸ → Ring on silent on the Mac). Export files are version 5 (`dayflowExport: 5`) because of these; versions 1 to 4 still import, and older moments (blocks with no end) become events.
+Besides blocks there are **events**, with only a time (Schedule → ＋ Add… → Event): an event rings once, with its own sound, shows as a dot on the dial, and is never merged with block reminders. A **repeated event** makes several at once (*Drink water* every 30 minutes from 9:00 to 5:00 is 17 events), checked before they're made and edited together through their repeat. In Today, you **check off** events as you do them (a cheer-up pops up, and done events turn gold, with a streak for days at least 80% done) and can **skip** any event or block for the day with its switch. A reminder can have **several sounds**, one picked at random each time, never the same twice in a row. On iPhone, events always ring as alarms (iOS 26 and later), through the silent switch and Focus, until you tap Stop or Done, and a block can **ring even on silent** too (Reminders ▸ → Ring on silent on the Mac). Older moments (blocks with no end) become events.
 
-## Export and import your schedule
+The schedule saves as you go, with **Undo** in the message after each change; a row with a problem (no name yet, say) isn't saved until it's fixed. A new schedule starts empty, with **Add a sample day** on Today and Schedule.
 
-**Schedule → Export…** saves a `.json` file with your blocks, the block types they use (all four reminders each), the Meetings reminders, volume, and any of your clips those reminders use (embedded, so the file works on another computer). It never includes your Google sign-in.
+## Mac and iPhone
 
-**Import…** shows what's in the file before anything changes: "This will replace your 8 blocks with 6 blocks from file.json". Untick **Also apply reminder and sound settings** to keep your own reminders and sounds. If a clip in the file can't be used, that reminder falls back to its starting sound and the preview says so.
-
-The file's Default always matches your Default, even if either has been renamed. Other types match yours by name (ignoring case). A type you already have keeps your reminders unless settings are applied; a type you don't have is added ("Adds 1 new block type: Deep reading"), with the file's reminders if settings are applied or the starting ones if not. Your other types are left alone. Files from earlier versions still import: they're converted the same way your own data was upgraded.
-
-Before every import DayFlow saves your current schedule, block types and settings to the `backups` folder (the newest ten are kept) in the same format. To undo an import, import the backup with settings applied; that puts your block types back exactly as they were. **Schedule → Backups** opens the folder.
+Each keeps its own schedule; there's no export, import or sync between them for now. Sync is planned: the data files are the same shape on both (`schedule.json`, `block-types.json`, `settings.json`, `sounds.json`, `progress.json`), so a later version can keep one schedule on both, merging changes by each block's `id`.
 
 ## Connect Google Calendar (one-time, about 5 minutes)
 
@@ -137,12 +131,12 @@ DayFlow then syncs today's events every 5 minutes (or use **Sync now**).
 
 In your OS's app-data folder (`~/Library/Application Support/Dayflow` on macOS, `%APPDATA%\Dayflow` on Windows, `~/.config/Dayflow` on Linux). The folder keeps its original spelling from before the app was renamed DayFlow.
 
-- `schedule.json`: your blocks
+- `schedule.json`: your events and blocks
 - `settings.json`: Meetings reminders, volume, and other preferences
 - `block-types.json`: your block types and their reminders
 - `sounds.json`: the list of your sound clips; the clips themselves are files in `~/Music/DayFlow Clips` (inside the data folder instead when you run with `--user-data-dir`). Clips from earlier versions, in `sounds/`, move there on first launch.
-- `backups/`: your schedule, types and settings as they were before each import (and before upgrading)
-- `window-state.json`: last mode and where the mini timer sits
+- `progress.json`: what you've checked off and skipped, and each day's result for the streak
+- `window-state.json`: whether the window and the Mini timer were open, and where the Mini timer sits
 - `google-credentials.json`: the OAuth client file you imported
 - `google-token.json`: your Google sign-in (delete it or click **Disconnect** to sign out)
 
@@ -165,15 +159,14 @@ The icon is drawn in `assets/icon.svg` (the app) and `assets/tray.svg` / `assets
 ## Project layout
 
 ```
-src/main.js              scheduler, notifications, window modes, tray, storage, sounds,
-                         export/import, Google Calendar
+src/main.js              scheduler, cards and notifications, the window and Mini timer, tray,
+                         storage, sounds, checks and skips, Google Calendar
 src/preload.js           the small API the windows are allowed to call
 src/renderer/index.html  the full window
 src/renderer/tokens.css  design system: colours, type, spacing, radii, shadows, motion (all windows)
 src/renderer/components.css  design system: buttons, fields, switches, tabs, cards, toasts, dialogs
 src/renderer/styles.css  the full window's layout
-src/renderer/renderer.js Today dial and agenda, schedule editor, settings, sound playback,
-                         import preview
+src/renderer/renderer.js Today dial and agenda, schedule editor, settings, sound playback
 src/renderer/mini.html   the mini timer (mini.css, mini.js)
 src/renderer/card.html   a reminder card (card.css, card.js)
 scripts/dev.js           npm start: builds .dev/DayFlow.app on macOS and runs it
