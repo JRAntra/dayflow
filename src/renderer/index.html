@@ -39,6 +39,7 @@
           <p class="eyebrow" id="today-clock"></p>
           <h1 id="today-date"></h1>
         </div>
+        <p id="today-progress" class="today-progress" role="status" hidden></p>
       </header>
       <div class="today-grid">
         <div class="card dial-card">
@@ -79,11 +80,17 @@
           <button id="show-backups" class="btn ghost">Backups</button>
         </div>
       </header>
+      <label id="group-repeats-row" class="group-row" hidden><input type="checkbox" id="group-repeats" class="switch"> Group repeats</label>
       <div class="sched-cols" aria-hidden="true">
-        <span>Starts</span><span>Ends</span><span>Block</span><span>Repeats on</span><span></span>
+        <span>Starts</span><span>Ends</span><span>Event or block</span><span>Repeats on</span><span></span>
       </div>
       <ul id="block-list" class="block-list"></ul>
-      <button id="add-block" class="btn add-block">＋ Add block</button>
+      <button id="add-block" class="btn add-block" popovertarget="add-menu" aria-haspopup="menu">＋ Add…</button>
+      <div id="add-menu" class="menu-pop" popover role="menu" aria-label="Add">
+        <button role="menuitem" data-add="event"><strong>Event</strong><span>Rings once, at its time</span></button>
+        <button role="menuitem" data-add="repeat"><strong>Repeated event…</strong><span>Every few minutes, from one time to another</span></button>
+        <button role="menuitem" data-add="block"><strong>Block</strong><span>A stretch of time, with four reminders</span></button>
+      </div>
       <div id="savebar" class="savebar" data-state="hidden" role="region" aria-label="Unsaved changes">
         <span id="sched-status" class="savebar-text">Unsaved changes</span>
         <button id="discard" class="btn ghost">Discard</button>
@@ -197,6 +204,11 @@
   </main>
 
   <div id="toast" class="toast" data-state="hidden" role="status"></div>
+  <!-- The cheer-up after checking an event off. -->
+  <div id="cheer" class="cheer" data-state="hidden" role="status" aria-live="polite" hidden>
+    <span id="cheer-ring" class="cheer-ring" aria-hidden="true"><svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18" pathLength="1"/></svg><svg class="star" viewBox="0 0 16 16"><path d="M8 1.6l1.9 4.1 4.5.5-3.4 3 1 4.4L8 11.3l-3.9 2.3 1-4.4-3.4-3 4.5-.5z" fill="currentColor"/></svg></span>
+    <span class="cheer-text"><strong id="cheer-title"></strong><span id="cheer-sub"></span><span id="cheer-streak" class="cheer-streak"></span></span>
+  </div>
 
   <dialog id="import-dialog" class="sheet" aria-labelledby="imp-title">
     <h2 id="imp-title">Import schedule</h2>
@@ -274,6 +286,60 @@
     <p>Songs from the Music app or Apple Music. They're protected, so no other app can play them. You need an actual audio file.</p>
     <div class="sheet-actions"><button id="help-done" class="btn primary">Done</button></div>
   </dialog>
+
+  <!-- A repeated event: what it makes, then a check before making it. -->
+  <dialog id="repeat-dialog" class="sheet repeat-sheet" aria-labelledby="rep-title">
+    <div id="rep-form">
+      <h2 id="rep-title">New repeated event</h2>
+      <label class="rep-field"><span>Name</span><input type="text" id="rep-name" placeholder="Drink water" maxlength="120"></label>
+      <div class="rep-times">
+        <label class="rep-field"><span>First at</span><input type="time" id="rep-first"></label>
+        <label class="rep-field"><span>Last at</span><input type="time" id="rep-last"></label>
+        <label class="rep-field"><span>Every</span><span class="every"><input type="number" id="rep-every" min="1" max="720" step="1"> min</span></label>
+      </div>
+      <p id="rep-count" class="muted rep-count"></p>
+      <div class="rep-field"><span>Repeats on</span>
+        <span class="days" id="rep-days" role="group" aria-label="Repeats on">
+          <button class="day" aria-label="Sunday" data-day="0">S</button><button class="day" aria-label="Monday" data-day="1">M</button><button class="day" aria-label="Tuesday" data-day="2">T</button><button class="day" aria-label="Wednesday" data-day="3">W</button><button class="day" aria-label="Thursday" data-day="4">T</button><button class="day" aria-label="Friday" data-day="5">F</button><button class="day" aria-label="Saturday" data-day="6">S</button>
+        </span>
+      </div>
+      <div id="rep-rows" class="rep-rows"></div>
+      <p class="muted rep-note">Each event rings once. On iPhone it rings like an alarm, through silent mode and Focus, until you tap Stop or Done.</p>
+      <p id="rep-problem" class="rep-problem" role="alert"></p>
+      <div class="sheet-actions">
+        <button id="rep-delete" class="btn danger ghost" hidden></button>
+        <span class="spacer"></span>
+        <button id="rep-cancel" class="btn">Cancel</button>
+        <button id="rep-save" class="btn primary">Create</button>
+      </div>
+    </div>
+    <div id="rep-confirm" hidden>
+      <h2 id="rep-confirm-title"></h2>
+      <div id="rep-confirm-text" class="rep-confirm-text"></div>
+      <div class="sheet-actions">
+        <span class="spacer"></span>
+        <button id="rep-confirm-back" class="btn">Go back</button>
+        <button id="rep-confirm-go" class="btn primary">Create</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Deleting one of a repeat's events: all of them, or only this one? -->
+  <dialog id="delete-dialog" class="sheet small-sheet" aria-labelledby="del-title">
+    <form method="dialog">
+      <h2 id="del-title"></h2>
+      <p id="del-text" class="muted"></p>
+      <div class="sheet-actions">
+        <button value="" class="btn">Cancel</button>
+        <span class="spacer"></span>
+        <button id="del-one" value="one" class="btn">Delete only this one</button>
+        <button id="del-all" value="all" class="btn primary danger-fill"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- A reminder's sounds, checked. -->
+  <div id="sound-pop" class="sound-pop" popover aria-label="Sounds"></div>
 
   <dialog id="rename-dialog" class="sheet clip-sheet small-sheet" aria-labelledby="rename-title">
     <h2 id="rename-title">Rename clip</h2>

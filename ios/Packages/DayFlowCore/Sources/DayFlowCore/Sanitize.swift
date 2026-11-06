@@ -21,10 +21,16 @@ public enum Sanitize {
         return v.truthy
     }
 
-    private static func reminder(_ r: JSONValue?, _ s: Specs.ReminderSpec, isSound: (String) -> Bool) -> Reminder {
-        let sound = r?["sound"]?.string.flatMap { isSound($0) ? $0 : nil } ?? s.sound
-        return Reminder(on: flag(r?["on"], s.on), sound: sound, fade: flag(r?["fade"], false),
-                        lead: s.hasLead ? clamp(r?["lead"], 1, 60, Specs.defaultLead) : nil)
+    /// One reminder. With `many`, it keeps every usable sound in `sounds` (in order, no repeats);
+    /// otherwise only one. An unusable sound is dropped; with none left it takes the starting one.
+    static func reminder(_ r: JSONValue?, _ s: Specs.ReminderSpec, many: Bool = true, isSound: (String) -> Bool) -> Reminder {
+        var list = (many ? r?["sounds"]?.array?.compactMap(\.string) : nil) ?? []
+        if let one = r?["sound"]?.string { list.insert(one, at: 0) }
+        var seen = Set<String>()
+        list = list.filter { isSound($0) && seen.insert($0).inserted }
+        if !many { list = Array(list.prefix(1)) }
+        return Reminder(on: flag(r?["on"], s.on), sound: list.first ?? s.sound, fade: flag(r?["fade"], false),
+                        lead: s.hasLead ? clamp(r?["lead"], 1, 60, Specs.defaultLead) : nil, sounds: list.count > 1 ? list : nil)
     }
 
     public static func typeReminders(_ v: JSONValue?, isSound: (String) -> Bool) -> TypeReminders {
@@ -35,8 +41,8 @@ public enum Sanitize {
     }
 
     public static func meetingReminders(_ v: JSONValue?, isSound: (String) -> Bool) -> MeetingReminders {
-        MeetingReminders(before: reminder(v?["before"], Specs.spec(MeetingReminderKey.before), isSound: isSound),
-                         start: reminder(v?["start"], Specs.spec(MeetingReminderKey.start), isSound: isSound))
+        MeetingReminders(before: reminder(v?["before"], Specs.spec(MeetingReminderKey.before), many: false, isSound: isSound),
+                         start: reminder(v?["start"], Specs.spec(MeetingReminderKey.start), many: false, isSound: isSound))
     }
 
     /// Names must be unique (ignoring case), every name is needed, and Default comes first.
@@ -67,18 +73,23 @@ public enum Sanitize {
         list.filter(\.isDefault) + list.filter { !$0.isDefault }
     }
 
-    /// Every block needs a name, a valid start, an end after it (or no end, for a moment) and a
+    /// Every block needs a name, a valid start, an end after it (or no end, for an event) and a
     /// type that exists; an unknown type becomes `fallback`. A block with type "own" keeps its own
     /// reminders (it falls back too if it has none). Days are cleaned and sorted, blocks sorted by start.
+    ///
+    /// An event (no end) has type "event" and one `alert`. A moment from before events existed
+    /// becomes one: it keeps the sound and fade of its Start reminder (or of Start preparation,
+    /// if only that was on), from its own reminders or its type's in `types`.
+    /// A repeat's rule is kept if it's usable; otherwise the event just stops being part of one.
     public static func blocks(_ v: JSONValue?, typeIds: Set<String>, fallback: String = Specs.defaultType,
-                              isSound: (String) -> Bool = { _ in true }) throws -> [Block] {
+                              types: [BlockType] = [], isSound: (String) -> Bool = { _ in true }) throws -> [Block] {
         guard let list = v?.array else { throw DataError("Schedule must be a list.") }
         var out: [Block] = []
         for (i, b) in list.enumerated() {
             let title = String((b["title"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
             if title.isEmpty { throw DataError("Block \(i + 1) needs a name.") }
             guard let start = b["start"]?.string, let s = HHMM.minutes(start) else { throw DataError("\"\(title)\" has an invalid time.") }
-            // No end (missing, null or empty) makes a moment.
+            // No end (missing, null or empty) makes an event.
             let rawEnd = b["end"]?.string ?? ""
             if !rawEnd.isEmpty {
                 guard let e = HHMM.minutes(rawEnd) else { throw DataError("\"\(title)\" has an invalid time.") }
@@ -86,13 +97,32 @@ public enum Sanitize {
             }
             let days = Array(Set((b["days"]?.array ?? []).compactMap { $0.numberValue }
                 .filter { $0 == $0.rounded() && $0 >= 0 && $0 <= 6 }.map { Int($0) })).sorted()
+            let id = b["id"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString.lowercased()
+            if rawEnd.isEmpty {
+                let alert: Reminder
+                if let a = b["alert"], a.object != nil {
+                    alert = reminder(a, Specs.eventSpec, isSound: isSound)
+                } else {
+                    // A moment: its Start (or Start preparation) reminder becomes its alarm.
+                    let typeId = b["type"]?.stringValue ?? ""
+                    let r: TypeReminders = typeId == Specs.ownType && b["reminders"]?.object != nil
+                        ? typeReminders(b["reminders"], isSound: isSound)
+                        : (types.first { $0.id == typeId } ?? types.first(where: \.isDefault))?.reminders ?? Specs.startingTypeReminders
+                    let from = !r.start.on && r.prep.on ? r.prep : r.start
+                    alert = Reminder(on: true, sound: from.sound, fade: from.fade, sounds: from.sounds)
+                }
+                var a = alert
+                a.on = true
+                a.lead = nil
+                out.append(.event(id: id, title: title, start: start, days: days, alert: a, series: series(b["series"])))
+                continue
+            }
             var type = b["type"]?.stringValue.flatMap { typeIds.contains($0) ? $0 : nil } ?? fallback
             var own: TypeReminders?
             if b["type"]?.stringValue == Specs.ownType, let r = b["reminders"], r.object != nil {
                 type = Specs.ownType
                 own = typeReminders(r, isSound: isSound)
             }
-            let id = b["id"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString.lowercased()
             let rings = flag(b["ringOnSilent"], false)
             out.append(Block(id: id, title: title, start: start, end: rawEnd, days: days, type: type, reminders: own,
                              ringsOnSilent: rings))
@@ -100,8 +130,18 @@ public enum Sanitize {
         return sortByStart(out)
     }
 
-    public static func blocks(_ list: [Block], typeIds: Set<String>, isSound: (String) -> Bool = { _ in true }) throws -> [Block] {
-        try blocks(JSONValue.from(list), typeIds: typeIds, isSound: isSound)
+    /// A repeat's rule, or nil if it isn't one DayFlow could have made.
+    static func series(_ v: JSONValue?) -> RepeatRule? {
+        guard let v, v.object != nil, let id = v["id"]?.stringValue, !id.isEmpty,
+              let first = v["first"]?.string, let last = v["last"]?.string,
+              let f = HHMM.minutes(first), let l = HHMM.minutes(last), l > f,
+              let every = v["every"]?.numberValue, every == every.rounded(), Specs.repeatEvery.contains(Int(every)) else { return nil }
+        return RepeatRule(id: id, first: first, last: last, every: Int(every))
+    }
+
+    public static func blocks(_ list: [Block], typeIds: Set<String>, types: [BlockType] = [],
+                              isSound: (String) -> Bool = { _ in true }) throws -> [Block] {
+        try blocks(JSONValue.from(list), typeIds: typeIds, types: types, isSound: isSound)
     }
 
     /// Stable sort by start time, like Array.prototype.sort in JavaScript.

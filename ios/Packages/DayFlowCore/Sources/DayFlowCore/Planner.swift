@@ -13,6 +13,8 @@ public struct DayBlock: Hashable, Identifiable, Sendable {
 /// What a reminder is about.
 public enum ReminderRole: String, Codable, Hashable, Sendable {
     case prep, start, warn, end, meetBefore, meetStart
+    /// An event ringing: always an alarm on iPhone.
+    case event
     /// "Open DayFlow to keep your reminders coming", after the last reminder that fits.
     case notice
 }
@@ -32,8 +34,11 @@ public struct PlannedReminder: Hashable, Identifiable, Sendable {
     public var meeting: Meeting?
     /// The calendar day it belongs to, e.g. "2026-11-4"; notifications are grouped by it.
     public var day: String
-    /// Rings as an alarm, through the silent switch and Focus, because its block rings even on silent.
+    /// Rings as an alarm, through the silent switch and Focus: an event, or a block that rings
+    /// even on silent.
     public var alarm: Bool = false
+    /// An event's alarm offers Done, which checks it off.
+    public var canCheck: Bool { role == .event }
 
     public var id: String { keys[0] }
     /// The sound to fall back on if this reminder's clip can't be used.
@@ -45,6 +50,7 @@ public struct PlannedReminder: Hashable, Identifiable, Sendable {
         case .end: Specs.spec(.end).sound
         case .meetBefore: Specs.spec(MeetingReminderKey.before).sound
         case .meetStart: Specs.spec(MeetingReminderKey.start).sound
+        case .event: Specs.eventSpec.sound
         case .notice: nil
         }
     }
@@ -65,11 +71,14 @@ public struct Planner: Sendable {
     public var meetings: [Meeting]
     public var calendar: Calendar
     public var locale: Locale
+    /// What's checked off and skipped: a skipped block or event has no reminders that day, and
+    /// a checked-off event doesn't ring.
+    public var progress: DayProgress
 
     public init(blocks: [Block], types: [BlockType], meetingReminders: MeetingReminders, meetings: [Meeting] = [],
-                calendar: Calendar = .current, locale: Locale = .current) {
+                calendar: Calendar = .current, locale: Locale = .current, progress: DayProgress = DayProgress()) {
         self.blocks = blocks; self.types = types; self.meetingReminders = meetingReminders; self.meetings = meetings
-        self.calendar = calendar; self.locale = locale
+        self.calendar = calendar; self.locale = locale; self.progress = progress
     }
 
     /// iOS keeps at most 64 scheduled notifications for an app. This leaves one free, so the
@@ -88,9 +97,10 @@ public struct Planner: Sendable {
         b.hasOwnReminders ? (b.reminders ?? Specs.startingTypeReminders) : typeOf(b.type).reminders
     }
 
-    /// "Focus", or "Own" for a block with its own reminders.
+    /// "Focus", "Own" for a block with its own reminders, "Event" or "Repeated event".
     public func typeName(for b: Block) -> String {
-        b.hasOwnReminders ? Specs.ownTypeName : typeOf(b.type).name
+        if b.isEvent { return b.isRepeat ? "Repeated event" : "Event" }
+        return b.hasOwnReminders ? Specs.ownTypeName : typeOf(b.type).name
     }
 
     // MARK: Times
@@ -106,19 +116,51 @@ public struct Planner: Sendable {
         calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: calendar.startOfDay(for: day)) ?? day
     }
 
-    /// The blocks (and moments) that run on this date, earliest first. A moment's end is its start,
-    /// so it's never "the current block".
-    public func blocksFor(_ date: Date) -> [DayBlock] {
+    /// The blocks and events on this date, earliest first, without the ones skipped that day
+    /// (unless `includeSkipped`). An event's end is its start, so it's never "the current block".
+    public func blocksFor(_ date: Date, includeSkipped: Bool = false) -> [DayBlock] {
         let dow = calendar.component(.weekday, from: date) - 1 // Calendar: 1 is Sunday
-        let list = blocks.filter { $0.days.contains(dow) && ($0.isMoment || $0.endMin > $0.startMin) }
+        let skipped = Set(progress.days[dayKey(date)]?.skipped ?? [])
+        let list = blocks.filter { $0.days.contains(dow) && ($0.isEvent || $0.endMin > $0.startMin) }
+            .filter { includeSkipped || !skipped.contains($0.id) }
             .map { b -> DayBlock in
                 var copy = b
-                if !b.hasOwnReminders { copy.type = typeOf(b.type).id }
+                if !b.hasOwnReminders && !b.isEvent { copy.type = typeOf(b.type).id }
                 return DayBlock(block: copy, start: at(date, b.startMin), end: at(date, b.endMin))
             }
         return list.enumerated().sorted { a, b in
             a.element.start != b.element.start ? a.element.start < b.element.start : a.offset < b.offset
         }.map(\.element)
+    }
+
+    public func isSkipped(_ id: String, on date: Date) -> Bool { progress.isSkipped(id, on: dayKey(date)) }
+    public func isDone(_ id: String, on date: Date) -> Bool { progress.isDone(id, on: dayKey(date)) }
+
+    // MARK: Sounds
+
+    /// Which of a reminder's sounds rings this time. `stream` names the run of times it rings
+    /// (a block's Start, say, or a whole repeat); `slot` is this time's place within one day of
+    /// it. The place counts on through the weeks, so the next time never repeats the last.
+    func sound(_ r: Reminder, stream: String, days: [Int], date: Date, per: Int = 1, slot: Int = 0) -> String {
+        guard r.choices.count > 1 else { return r.sound }
+        let order = ScheduleEdits.weekOrder.filter(days.contains)
+        let dow = calendar.component(.weekday, from: date) - 1
+        let pos = order.firstIndex(of: dow) ?? 0
+        // Whole weeks since a Monday (1 January 2001), counted in days so time zones don't matter.
+        let ref = calendar.date(from: DateComponents(year: 2001, month: 1, day: 1)) ?? Date(timeIntervalSinceReferenceDate: 0)
+        let daysSince = calendar.dateComponents([.day], from: ref, to: calendar.startOfDay(for: date)).day ?? 0
+        let week = Int((Double(daysSince) / 7).rounded(.down))
+        return SoundPick.pick(r.choices, stream: stream, index: (week * max(order.count, 1) + pos) * per + slot)
+    }
+
+    /// The sound an event rings with on this date.
+    public func eventSound(_ e: Block, on date: Date) -> String {
+        if let rule = e.series {
+            let times = ScheduleEdits.repeatTimes(rule)
+            return sound(e.eventAlert, stream: "series|\(rule.id)", days: e.days, date: date, per: max(times.count, 1),
+                         slot: times.firstIndex(of: e.startMin) ?? 0)
+        }
+        return sound(e.eventAlert, stream: e.id, days: e.days, date: date)
     }
 
     // MARK: One day's reminders
@@ -127,8 +169,8 @@ public struct Planner: Sendable {
         let day = dayKey(date)
         let midnight = calendar.startOfDay(for: date)
         let all = blocksFor(date)
-        // Blocks hand over to blocks; moments are reminded about separately, never merged.
-        let list = all.filter { !$0.block.isMoment }
+        // Blocks hand over to blocks; events ring on their own, never merged.
+        let list = all.filter { !$0.block.isEvent }
         var events: [PlannedReminder] = []
 
         for b in list {
@@ -138,7 +180,8 @@ public struct Planner: Sendable {
             func key(_ role: String) -> String { "\(day)|block|\(b.block.id)|\(role)" }
             func make(_ role: ReminderRole, _ at: Date, _ rem: Reminder, _ title: String, _ body: String) -> PlannedReminder {
                 PlannedReminder(keys: [key(role.rawValue)], at: at, role: role, blockId: b.block.id, title: title, body: body,
-                                sound: rem.sound, fade: rem.fade, meeting: nil, day: day, alarm: b.block.ringsOnSilent)
+                                sound: sound(rem, stream: "\(b.block.id)|\(role.rawValue)", days: b.block.days, date: date),
+                                fade: rem.fade, meeting: nil, day: day, alarm: b.block.ringsOnSilent)
             }
 
             let prepLead = r.prep.lead ?? Specs.defaultLead
@@ -166,25 +209,14 @@ public struct Planner: Sendable {
 
         var merged = mergeSameMoment(events, list)
 
-        // Moments: "In 5 min: Take medicine" and "Now: Take medicine", with the block they fall in.
-        for m in all where m.block.isMoment {
-            let r = reminders(for: m.block)
-            let during = list.first { $0.start <= m.start && m.start < $0.end }
-            func key(_ role: String) -> String { "\(day)|moment|\(m.block.id)|\(role)" }
-            let lead = r.prep.lead ?? Specs.defaultLead
-            let prepAt = m.start.addingTimeInterval(-Double(lead) * 60)
-            if r.prep.on && prepAt >= midnight {
-                merged.append(PlannedReminder(keys: [key("prep")], at: prepAt, role: .prep, blockId: m.block.id,
-                                              title: "In \(lead) min: \(m.title)", body: "Get ready. It's at \(time(m.start)).",
-                                              sound: r.prep.sound, fade: r.prep.fade, meeting: nil, day: day,
-                                              alarm: m.block.ringsOnSilent))
-            }
-            if r.start.on {
-                let body = during.map { "It's \(time(m.start)), during \($0.title)." } ?? "It's \(time(m.start))."
-                merged.append(PlannedReminder(keys: [key("start")], at: m.start, role: .start, blockId: m.block.id,
-                                              title: "Now: \(m.title)", body: body, sound: r.start.sound, fade: r.start.fade,
-                                              meeting: nil, day: day, alarm: m.block.ringsOnSilent))
-            }
+        // Events: "Now: Take medicine", with the block it falls in. One that's checked off is done.
+        for e in all where e.block.isEvent && !progress.isDone(e.block.id, on: day) {
+            let r = e.block.eventAlert
+            let during = list.first { $0.start <= e.start && e.start < $0.end }
+            let body = during.map { "It's \(time(e.start)), during \($0.title)." } ?? "It's \(time(e.start))."
+            merged.append(PlannedReminder(keys: ["\(day)|event|\(e.block.id)"], at: e.start, role: .event, blockId: e.block.id,
+                                          title: "Now: \(e.title)", body: body, sound: eventSound(e.block, on: date), fade: r.fade,
+                                          meeting: nil, day: day, alarm: true))
         }
 
         let m = meetingReminders
@@ -247,7 +279,7 @@ public struct Planner: Sendable {
     /// ahead. Reminders during a pause are left out. If more reminders would follow, a quiet notice
     /// comes a minute after the last one, asking you to open DayFlow.
     ///
-    /// Reminders of blocks that ring even on silent stay alarms when `alarms` is true (alarms are
+    /// Events, and reminders of blocks that ring even on silent, stay alarms when `alarms` is true (alarms are
     /// allowed) and sounds are on, up to `alarmLimit`; they don't count towards `limit`, since
     /// they aren't notifications. Otherwise they become normal reminders.
     public func window(from now: Date, pausedUntil: Date? = nil, limit: Int = Planner.windowLimit,
@@ -288,6 +320,51 @@ public struct Planner: Sendable {
                 sound: nil, fade: false, meeting: nil, day: dayKey(last.at))
         }
         return ReminderWindow(reminders: upcoming, notice: notice)
+    }
+}
+
+// MARK: Checking off and the streak
+
+extension Planner {
+    /// A day's events that count: the ones not skipped. And how many of them are checked off.
+    public func result(on date: Date) -> (done: Int, total: Int) {
+        let events = blocksFor(date).filter(\.block.isEvent)
+        return (events.filter { isDone($0.id, on: date) }.count, events.count)
+    }
+
+    /// Whether a day counts towards the streak: at least 80% of its events done.
+    public static func counts(done: Int, total: Int) -> Bool {
+        total > 0 && Double(done) >= Double(total) * Specs.streakShare - 1e-9
+    }
+
+    /// Days in a row whose events were (at least 80%) done, up to today. Today joins in once it
+    /// counts; until then the streak is the run up to yesterday. A day with no events (or all of
+    /// them skipped) is passed over without breaking it. Past days use the result DayFlow saw
+    /// that day; a day it never saw uses your plan, with nothing checked off.
+    public func streak(at now: Date) -> Int {
+        let today = calendar.startOfDay(for: now)
+        let t = result(on: today)
+        var n = Self.counts(done: t.done, total: t.total) ? 1 : 0
+        guard let sinceKey = progress.since, let since = DayProgress.date(sinceKey, calendar: calendar) else { return n }
+        var d = today
+        for _ in 0..<DayProgress.keepDays {
+            guard let prev = calendar.date(byAdding: .day, value: -1, to: d), prev >= since else { break }
+            d = prev
+            let rec = progress.days[dayKey(d)]
+            let live = (rec?.total == nil) ? result(on: d) : (done: 0, total: 0)
+            let total = rec?.total ?? live.total, done = rec?.count ?? live.done
+            if total == 0 { continue }
+            if Self.counts(done: done, total: total) { n += 1 } else { break }
+        }
+        return n
+    }
+
+    /// DayProgress with today's result noted, for the streak.
+    public func noting(_ now: Date) -> DayProgress {
+        var p = progress
+        let r = result(on: now)
+        p.note(done: r.done, total: r.total, day: dayKey(now))
+        return p
     }
 }
 

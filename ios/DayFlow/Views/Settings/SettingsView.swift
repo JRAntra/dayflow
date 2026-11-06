@@ -196,17 +196,23 @@ struct ReminderSection: View {
     @Binding var reminder: Reminder
     /// Shows the settings without letting them change (a block using its type's reminders).
     var readOnly = false
+    /// An event's alarm: always on, so no switch.
+    var alwaysOn = false
+    /// It can have several sounds, one picked at random each time (not meetings).
+    var many = true
 
     var body: some View {
         Section {
-            Toggle(isOn: $reminder.on.animation(.snappy)) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(spec.label)
-                    if let example { Text(example).font(.caption).foregroundStyle(.secondary) }
+            if !alwaysOn {
+                Toggle(isOn: $reminder.on.animation(.snappy)) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(spec.label)
+                        if let example { Text(example).font(.caption).foregroundStyle(.secondary) }
+                    }
                 }
+                .disabled(readOnly)
             }
-            .disabled(readOnly)
-            if reminder.on {
+            if reminder.on || alwaysOn {
                 if spec.hasLead {
                     if readOnly {
                         LabeledContent("Minutes ahead", value: "\(reminder.lead ?? Specs.defaultLead) min")
@@ -217,13 +223,16 @@ struct ReminderSection: View {
                     }
                 }
                 if readOnly {
-                    LabeledContent("Sound", value: model.soundName(reminder.sound))
+                    LabeledContent(reminder.choices.count > 1 ? "Sounds" : "Sound", value: model.soundsName(reminder))
                 } else {
                     NavigationLink {
-                        SoundPickerView(title: spec.label, sound: $reminder.sound, fade: reminder.fade, fallback: spec.sound)
+                        // A key-path binding, not a hand-made one: iOS 17 keeps re-rendering a pushed view
+                        // that gets a new Binding every time its parent redraws.
+                        SoundPickerView(title: spec.label, sounds: $reminder.choices, many: many, fade: reminder.fade, fallback: spec.sound)
                     } label: {
-                        LabeledContent("Sound", value: model.soundName(reminder.sound))
+                        LabeledContent(reminder.choices.count > 1 ? "Sounds" : "Sound", value: model.soundsName(reminder))
                     }
+                    .accessibilityIdentifier("sound-\(spec.label)")
                 }
                 Toggle(isOn: $reminder.fade) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -233,7 +242,8 @@ struct ReminderSection: View {
                 }
                 .disabled(readOnly)
                 Button {
-                    model.preview(reminder.sound, fade: reminder.fade, fallback: spec.sound)
+                    // With several sounds, Play plays a random one of them.
+                    model.preview(reminder.choices.randomElement() ?? reminder.sound, fade: reminder.fade, fallback: spec.sound)
                 } label: {
                     Label("Play", systemImage: "play.fill")
                 }
@@ -242,18 +252,25 @@ struct ReminderSection: View {
     }
 }
 
-/// The sound menu: built-ins first, then your clips. Choosing one plays it.
+/// The sound menu: built-ins first, then your clips. Tapping a sound plays it. With `many`, the
+/// circle beside each one checks it: a reminder with several sounds picks one at random each
+/// time, never the one it played last. At least one stays checked.
 struct SoundPickerView: View {
     @Environment(AppModel.self) private var model
     let title: String
-    @Binding var sound: String
+    @Binding var sounds: [String]
+    var many = false
     let fade: Bool
     let fallback: String
 
     var body: some View {
         List {
-            Section("Built-in") {
+            Section {
                 ForEach(Specs.builtinSounds) { s in row(s.id, s.name) }
+            } header: {
+                Text("Built-in")
+            } footer: {
+                if many && sounds.count > 1 { Text("\(sounds.count) sounds checked: one plays at random each time, never the same twice in a row.") }
             }
             if !model.clips.isEmpty {
                 Section("Your clips") {
@@ -262,24 +279,55 @@ struct SoundPickerView: View {
             }
             Section {
             } footer: {
-                Text("Previews play even when your iPhone is on silent. Reminders follow your ringer and the silent switch.")
+                Text(many ? "Tap a sound to hear it; tap its circle to check it. Check several to shuffle them. Previews play even when your iPhone is on silent."
+                     : "Previews play even when your iPhone is on silent. Reminders follow your ringer and the silent switch.")
             }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .sensoryFeedback(.selection, trigger: sound)
+        .sensoryFeedback(.selection, trigger: sounds)
         .onDisappear { SoundPlayer.shared.stop() }
     }
 
-    func row(_ id: String, _ name: String) -> some View {
-        Button {
-            sound = id
-            model.preview(id, fade: fade, fallback: fallback)
-        } label: {
-            HStack {
-                Text(name).foregroundStyle(.primary)
-                Spacer()
-                if sound == id { Image(systemName: "checkmark").foregroundStyle(Palette.accent).fontWeight(.semibold) }
+    @ViewBuilder func row(_ id: String, _ name: String) -> some View {
+        let checked = sounds.contains(id)
+        if many {
+            HStack(spacing: 12) {
+                Button {
+                    if checked { if sounds.count > 1 { sounds.removeAll { $0 == id } } } else { sounds.append(id) }
+                } label: {
+                    Image(systemName: checked ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(checked ? Palette.accent : .secondary)
+                        .frame(minWidth: 30, minHeight: 30)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(name)
+                .accessibilityValue(checked ? "Checked" : "Not checked")
+                .accessibilityHint(checked && sounds.count == 1 ? "At least one sound stays checked" : "Checks or unchecks this sound")
+                .accessibilityIdentifier("check-\(name)")
+                Button { model.preview(id, fade: fade, fallback: fallback) } label: {
+                    HStack {
+                        Text(name).foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "play.circle").foregroundStyle(.secondary)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Play \(name)")
+            }
+        } else {
+            Button {
+                sounds = [id]
+                model.preview(id, fade: fade, fallback: fallback)
+            } label: {
+                HStack {
+                    Text(name).foregroundStyle(.primary)
+                    Spacer()
+                    if checked { Image(systemName: "checkmark").foregroundStyle(Palette.accent).fontWeight(.semibold) }
+                }
             }
         }
     }

@@ -22,3 +22,6 @@ html, body { height: 100%; overflow: hidden; background: transparent; user-selec
 .sub { font-size: var(--text-sm); color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .actions { display: flex; justify-content: flex-end; gap: 6px; }
 .actions .btn { height: 26px; }
+.card.cheer .label { color: var(--sun); }
+.card.cheer .title { animation: cheer-pop 520ms var(--ease-spring); }
+@keyframes cheer-pop { from { transform: scale(0.85); opacity: 0.4; } }

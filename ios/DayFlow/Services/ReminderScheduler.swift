@@ -8,11 +8,15 @@ import UserNotifications
 /// due. Instead the next reminders are scheduled ahead of time: up to 62 of them (iOS keeps at
 /// most 64 per app), then a quiet notice asking you to open DayFlow. Whenever the app runs, the
 /// list is refilled. Each one plays its sound at your ringer volume and follows the silent
-/// switch and Focus, except the reminders of blocks that ring even on silent: those are set as
-/// alarms by AlarmScheduler, and only fall back to notifications when alarms aren't allowed.
+/// switch and Focus, except events and the reminders of blocks that ring even on silent: those
+/// are set as alarms by AlarmScheduler, and only fall back to notifications when alarms aren't
+/// allowed.
 enum ReminderScheduler {
     static let joinCategory = "meeting-join"
     static let calendarCategory = "meeting-calendar"
+    /// An event's notification (when it can't be an alarm) has Done, which checks it off.
+    static let eventCategory = "event"
+    static let doneAction = "done"
     static let joinAction = "join"
     static let calendarAction = "calendar"
     static let testId = "test-notification"
@@ -26,7 +30,11 @@ enum ReminderScheduler {
             identifier: calendarCategory,
             actions: [UNNotificationAction(identifier: calendarAction, title: "Open in Calendar", options: [.foreground])],
             intentIdentifiers: [])
-        UNUserNotificationCenter.current().setNotificationCategories([join, calendar])
+        let event = UNNotificationCategory(
+            identifier: eventCategory,
+            actions: [UNNotificationAction(identifier: doneAction, title: "Done", options: [])],
+            intentIdentifiers: [])
+        UNUserNotificationCenter.current().setNotificationCategories([join, calendar, event])
     }
 
     /// Replaces every scheduled reminder with the current window. Returns how many were scheduled.
@@ -63,8 +71,9 @@ enum ReminderScheduler {
             if let name = soundFile(ev) {
                 content.sound = UNNotificationSound(named: UNNotificationSoundName(name))
             }
-            var info: [String: Any] = ["role": ev.role.rawValue, "at": ev.at.timeIntervalSinceReferenceDate]
+            var info: [String: Any] = ["role": ev.role.rawValue, "at": ev.at.timeIntervalSinceReferenceDate, "day": ev.day]
             if let blockId = ev.blockId { info["blockId"] = blockId }
+            if ev.canCheck { content.categoryIdentifier = eventCategory }
             if let mt = ev.meeting {
                 info["meetingStart"] = mt.start.timeIntervalSinceReferenceDate
                 if let url = mt.url {
@@ -92,7 +101,7 @@ enum ReminderScheduler {
     private static func previewKeep(_ store: DataStore) -> Set<String> {
         let v = store.settings.volume
         let reminders = store.types.flatMap(\.reminders.all) + store.settings.meetings.all
-        return Set(reminders.map { SoundLibrary.fileName($0.sound, fade: $0.fade, volume: v) })
+        return Set(reminders.flatMap { r in r.choices.map { SoundLibrary.fileName($0, fade: r.fade, volume: v) } })
     }
 
     /// Shows what a block starting looks like, with Default's Start sound, in two seconds.

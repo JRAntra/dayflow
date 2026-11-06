@@ -29,15 +29,19 @@ Packages/DayFlowCore/             the parts that don't need iOS, tested with `sw
   Models.swift                    Block, BlockType, Reminder, Settings…, shaped like the Mac's JSON
   Specs.swift                     starting values, built-in sounds, the sample schedule
   Sanitize.swift                  the Mac's cleaning rules, and the version 1 upgrade
-  Planner.swift                   reminders for a day (wording and merge rules), the rolling window
-  ScheduleEdits.swift             checks, ＋ rules, moving and resizing, "This day only", day-view columns
+  Planner.swift                   reminders for a day (wording and merge rules), the rolling window,
+                                  which of several sounds rings, today's result and the streak
+  ScheduleEdits.swift             checks, ＋ rules, events ↔ blocks, repeats, moving and resizing,
+                                  "This day only", day-view columns
+  DayProgress.swift               checks and skips by day (progress.json, never exported), SoundPick
   DataStore.swift, Import.swift   files, clips, backups, export and import
   ClipFolder.swift                the Clips folder: scanning, renames, long files, Originals
 DayFlow/                          the app
   AppModel.swift                  state for every screen; refreshes reminders after each change
   DayFlowApp.swift                notification taps and actions, background refresh, opened files
   Services/ReminderScheduler.swift  the next 62 reminders as notifications, plus the notice
-  Services/AlarmScheduler.swift  blocks that ring even on silent, as AlarmKit alarms (iOS 26+)
+  Services/AlarmScheduler.swift  events and blocks that ring even on silent, as AlarmKit alarms (iOS 26+)
+  Services/CheckOffIntent.swift  Done on an event's alarm: checks it off without opening the app
   Services/CalendarService.swift  meetings from the iPhone's calendars (EventKit), Join links
   Services/LiveActivityController.swift  the Live Activity and the widgets' data
   Sound/SoundLibrary.swift        writes each sound as CAF with your volume and Fade in built in
@@ -56,7 +60,8 @@ The built-in sounds come from `../assets/sounds`, shared with the Mac app. The a
 ## How iOS changes things
 
 - **Reminders are scheduled ahead.** iOS suspends apps in the background, so instead of the Mac's once-a-second check, the next reminders are scheduled as notifications (up to 62, as iOS allows 64), refilled whenever the app runs. A final notice asks you to open DayFlow if it hasn't run for a while.
+- **Several sounds are picked ahead.** A reminder with several sounds can't choose when it rings, since iOS needs the sound when the notification or alarm is set. `SoundPick` works the pick out from the ring's place in its run of times (stable across refreshes, so alarm ids don't change), never the same as the one before; the Mac uses the same function, `soundPick` in main.js.
 - **Sounds are pre-rendered.** Notifications play their sound at the ringer volume, from start to end, so the volume and Fade in are built into a copy of each sound (`Library/Sounds/df-<hash>.caf`, 16-bit PCM, at most 30 seconds).
-- **Ring even on silent uses AlarmKit.** Notifications always follow the silent switch, so a block set to ring even on silent has its reminders set as alarms instead (iOS 26 and later, after you allow alarms). Each alarm's id is a hash of what it says and when, so unchanged alarms are left alone on each refresh. The iOS 27 Simulator refuses AlarmKit permission without asking; turn on **Alarms** in the Simulator's Settings → Apps → DayFlow instead (the UI test does this).
+- **Events and Ring even on silent use AlarmKit.** Notifications always follow the silent switch, so events, and blocks set to ring even on silent, are set as alarms instead (iOS 26 and later, after you allow alarms). An event's alarm has a second button, Done, which runs `CheckOffIntent` in the app's process (iOS starts it in the background if needed); the cheer-up shows the next time the app is in front. Each alarm's id is a hash of what it says and when, so unchanged alarms are left alone on each refresh. The iOS 27 Simulator refuses AlarmKit permission without asking; turn on **Alarms** in the Simulator's Settings → Apps → DayFlow instead (the UI test does this).
 - **No snooze, no cards, no window modes.** Meeting reminders have Join or Open in Calendar; the Mini timer's job goes to the Live Activity and widgets.
 - **Meetings come from EventKit**, not Google's API, so there's no OAuth client to set up.

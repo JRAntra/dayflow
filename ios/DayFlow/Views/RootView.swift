@@ -36,6 +36,18 @@ struct RootView: View {
             }
         }
         .animation(.snappy, value: model.banner?.id)
+        // The cheer-up after checking an event off.
+        .overlay(alignment: .top) {
+            if let cheer = model.cheer {
+                CheerView(cheer: cheer)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9)))
+                    .id(cheer.id)
+                    .onTapGesture { withAnimation(.smooth) { model.cheer = nil } }
+            }
+        }
+        .animation(.spring(duration: 0.45, bounce: 0.35), value: model.cheer?.id)
         // Choose 30 seconds, from Sounds or from a song shared or AirDropped to DayFlow.
         .sheet(item: $model.pieceRequest) { r in PieceSheet(request: r) }
         #if DEBUG
@@ -60,6 +72,50 @@ struct RootView: View {
             }
         }
         #endif
+    }
+}
+
+/// "Nice! 3 of 6 done today", a ring filling to the day's share, and the streak. All done says so.
+struct CheerView: View {
+    let cheer: Cheer
+    @State private var filled = false
+
+    var share: Double { cheer.total > 0 ? Double(cheer.done) / Double(cheer.total) : 1 }
+    var headline: String {
+        if cheer.total > 0 && cheer.done >= cheer.total { return "All \(cheer.total) done today! 🎉" }
+        return ["Nice!", "Well done!", "Great job!", "Keep it up!"][cheer.done % 4]
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle().stroke(Palette.sun.opacity(0.22), lineWidth: 6)
+                Circle().trim(from: 0, to: filled ? share : max(0, share - 1 / Double(max(cheer.total, 1))))
+                    .stroke(Palette.sun, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: "star.fill").foregroundStyle(Palette.sun).font(.system(size: 16, weight: .bold))
+                    .scaleEffect(filled ? 1 : 0.4)
+            }
+            .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(headline).font(.headline)
+                Text(cheer.total > 0 && cheer.done < cheer.total ? "\(cheer.done) of \(cheer.total) done today" : "Every event checked off")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                if cheer.streak > 0 {
+                    Text("\(cheer.streak)-day streak 🔥").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.sun)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.regularMaterial, in: .rect(cornerRadius: 20))
+        .overlay { RoundedRectangle(cornerRadius: 20).stroke(Palette.sun.opacity(0.35), lineWidth: 1) }
+        .shadow(color: .black.opacity(0.15), radius: 16, y: 6)
+        .onAppear { withAnimation(.spring(duration: 0.7, bounce: 0.4).delay(0.15)) { filled = true } }
+        .sensoryFeedback(.success, trigger: filled)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
+        .accessibilityIdentifier("cheer")
     }
 }
 

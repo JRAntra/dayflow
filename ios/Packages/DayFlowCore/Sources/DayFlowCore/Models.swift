@@ -3,11 +3,14 @@ import Foundation
 // The data model. Field names and shapes match the Mac app's files (schedule.json,
 // block-types.json, settings.json, sounds.json), so export files move between them unchanged.
 
-/// One block of your weekly plan. Times are "HH:mm" in local time; days are 0 (Sunday) to 6.
-/// A block with an empty `end` is a **moment**: it happens at its start time and doesn't last.
-/// A block whose `type` is "own" has its own `reminders` instead of a block type's.
-/// A block with `ringOnSilent` rings each of its reminders as an alarm on iPhone, through the
-/// silent switch and Focus.
+/// One item of your weekly plan. Times are "HH:mm" in local time; days are 0 (Sunday) to 6.
+///
+/// There are two kinds:
+/// - An **event** has an empty `end`: it happens at its start time and rings once, with its
+///   own `alert`. On iPhone it always rings as an alarm. Its `type` is "event".
+///   An event made by a repeat ("Drink water every 30 min") carries that repeat in `series`.
+/// - A **block** has an end and four reminders, from its block type or, when `type` is "own",
+///   its own `reminders`. With `ringOnSilent` each reminder rings as an alarm on iPhone.
 public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var title: String
@@ -19,24 +22,46 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var reminders: TypeReminders?
     /// true, or left out of the file when off.
     public var ringOnSilent: Bool?
+    /// An event's one reminder: its sound(s) and fade.
+    public var alert: Reminder?
+    /// The repeat that made this event, if any.
+    public var series: RepeatRule?
 
     public init(id: String = Block.newId(), title: String, start: String, end: String, days: [Int], type: String,
-                reminders: TypeReminders? = nil, ringsOnSilent: Bool = false) {
+                reminders: TypeReminders? = nil, ringsOnSilent: Bool = false, alert: Reminder? = nil, series: RepeatRule? = nil) {
         self.id = id; self.title = title; self.start = start; self.end = end; self.days = days; self.type = type
         self.reminders = reminders
         self.ringOnSilent = ringsOnSilent ? true : nil
+        self.alert = alert
+        self.series = series
+    }
+
+    /// A new event, ringing with `alert`.
+    public static func event(id: String = Block.newId(), title: String, start: String, days: [Int], alert: Reminder,
+                             series: RepeatRule? = nil) -> Block {
+        Block(id: id, title: title, start: start, end: "", days: days, type: Specs.eventType, alert: alert, series: series)
     }
 
     /// "Ring even on silent": on iPhone each reminder rings as an alarm, until you tap Stop.
+    /// Events always ring as alarms.
     public var ringsOnSilent: Bool {
         get { ringOnSilent == true }
         set { ringOnSilent = newValue ? true : nil }
     }
 
-    /// Only a start time: it happens at that moment.
-    public var isMoment: Bool { end.isEmpty }
+    /// Only a start time: it happens at that moment and rings once.
+    public var isEvent: Bool { end.isEmpty }
+    /// The old name for an event.
+    public var isMoment: Bool { isEvent }
+    /// Made by a repeat.
+    public var isRepeat: Bool { series != nil }
     /// Reminders set on the block itself rather than taken from a block type.
     public var hasOwnReminders: Bool { type == Specs.ownType }
+    /// An event's reminder, or the starting one if it has none.
+    public var eventAlert: Reminder {
+        get { alert ?? Specs.startingEventAlert }
+        set { alert = newValue }
+    }
 
     /// Ids look like the Mac's: "b" + base-36 time + 4 random characters.
     public static func newId(now: Date = Date()) -> String {
@@ -52,16 +77,51 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var lengthMin: Int { endMin - startMin }
 }
 
+/// The rule a repeated event was made by: every `every` minutes from `first` to `last`
+/// ("HH:mm"), `last` included when the gap lands on it. Every event it made carries the same
+/// rule; `id` ties them together.
+public struct RepeatRule: Codable, Hashable, Sendable {
+    public var id: String
+    public var first: String
+    public var last: String
+    public var every: Int
+
+    public init(id: String = RepeatRule.newId(), first: String, last: String, every: Int) {
+        self.id = id; self.first = first; self.last = last; self.every = every
+    }
+
+    public static func newId(now: Date = Date()) -> String { "r" + Block.newId(now: now).dropFirst() }
+}
+
 /// One reminder: whether it's on, its sound, whether it fades in, and (for the ones that come
 /// early) how many minutes ahead.
+///
+/// A reminder can have several sounds; each time it rings one is picked at random, never the
+/// one it played last. `sound` is always the first of them, so a file read by an older DayFlow
+/// still has a sound; `sounds` lists them all, and is left out when there's only one.
 public struct Reminder: Codable, Hashable, Sendable {
     public var on: Bool
     public var sound: String
     public var fade: Bool
     public var lead: Int?
+    public var sounds: [String]?
 
-    public init(on: Bool, sound: String, fade: Bool = false, lead: Int? = nil) {
+    public init(on: Bool, sound: String, fade: Bool = false, lead: Int? = nil, sounds: [String]? = nil) {
         self.on = on; self.sound = sound; self.fade = fade; self.lead = lead
+        self.sounds = nil
+        if let sounds { choices = sounds }
+    }
+
+    /// Every sound it can play, at least one.
+    public var choices: [String] {
+        get { (sounds?.isEmpty == false ? sounds! : [sound]) }
+        set {
+            var seen = Set<String>()
+            let list = newValue.filter { seen.insert($0).inserted }
+            guard let first = list.first else { return }
+            sound = first
+            sounds = list.count > 1 ? list : nil
+        }
     }
 }
 

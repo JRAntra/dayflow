@@ -6,7 +6,14 @@ public enum Specs {
     /// The type of a block with its own reminders (Own reminders in the Type menu).
     public static let ownType = "own"
     public static let ownTypeName = "Own"
+    /// The type of an event: it has its own one reminder, never a block type's.
+    public static let eventType = "event"
     public static let defaultLead = 5
+    /// A repeat's gap, in minutes, and the most events one repeat may make.
+    public static let repeatEvery = 1...720
+    public static let maxRepeatEvents = 200
+    /// A day counts towards your streak when at least this share of its events are done.
+    public static let streakShare = 0.8
 
     /// The built-in sounds, in menu order. The files are assets/sounds/<id>.mp3 in the repo.
     public static let builtinSounds: [BuiltinSound] = [
@@ -59,6 +66,10 @@ public enum Specs {
         case .start: ReminderSpec(label: "Starting now", on: true, hasLead: false, sound: "elegant-door-announcement")
         }
     }
+
+    /// An event's one reminder, as its edit form calls it.
+    public static let eventSpec = ReminderSpec(label: "Alarm", on: true, hasLead: false, sound: "elevator-announcement-bells")
+    public static var startingEventAlert: Reminder { eventSpec.starting }
 
     public static var startingTypeReminders: TypeReminders {
         TypeReminders(prep: spec(.prep).starting, start: spec(TypeReminderKey.start).starting, warn: spec(.warn).starting, end: spec(.end).starting)

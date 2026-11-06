@@ -26,13 +26,12 @@ import Testing
         #expect(!evs.contains { $0.alarm && $0.at > date(2026, 11, 2, 11, 30) })
     }
 
-    @Test func momentsRingToo() {
-        var types = Specs.starterTypes()
-        types[0].reminders.prep.on = true
-        let pill = Block(id: "m", title: "Take medicine", start: "13:10", end: "", days: [1], type: "default", ringsOnSilent: true)
-        let evs = Planner(blocks: Specs.sampleSchedule() + [pill], types: types, meetingReminders: Specs.startingMeetingReminders,
+    @Test func eventsAlwaysRing() {
+        let pill = Block.event(id: "m", title: "Take medicine", start: "13:10", days: [1], alert: Specs.startingEventAlert)
+        let evs = Planner(blocks: Specs.sampleSchedule() + [pill], types: Specs.starterTypes(), meetingReminders: Specs.startingMeetingReminders,
                           calendar: testCalendar, locale: testLocale).events(on: monday).filter { $0.blockId == "m" }
-        #expect(evs.map(\.role) == [.prep, .start] && evs.allSatisfy { $0.alarm })
+        #expect(evs.map(\.role) == [.event])
+        #expect(evs.allSatisfy { $0.alarm && $0.canCheck })
     }
 
     @Test func alarmsOnlyWhenAllowedAndSoundsAreOn() {
@@ -66,7 +65,7 @@ import Testing
         #expect(a.blocks.first { $0.id == "b4" }?.ringsOnSilent == true)
 
         let export = a.exportPayload()
-        #expect(export["dayflowExport"] == .number(4))
+        #expect(export["dayflowExport"] == .number(5))
         let b = tempStore()
         try b.applyImport(try b.readImport(try JSONFile.encode(export), fileName: "x.json"), applySettings: false)
         #expect(b.blocks.filter(\.ringsOnSilent).map(\.id) == ["b4"])

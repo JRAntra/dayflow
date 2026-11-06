@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld('dayflow', {
   platform: process.platform,
   getAll: () => ipcRenderer.invoke('get-all'),
   getToday: () => ipcRenderer.invoke('get-today'),
+  // Checking an event off for today, and skipping an event or block today. Both return
+  // { done, total, streak } for the cheer-up.
+  setDone: (id, on) => ipcRenderer.invoke('set-done', id, on),
+  setSkipped: (id, on) => ipcRenderer.invoke('set-skipped', id, on),
   saveSchedule: (blocks) => ipcRenderer.invoke('save-schedule', blocks),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
   importCredentials: () => ipcRenderer.invoke('import-credentials'),
@@ -69,4 +73,5 @@ contextBridge.exposeInMainWorld('dayflow', {
   cardAction: (id, action) => ipcRenderer.send('card-action', id, action),
   onCardMore: (fn) => ipcRenderer.on('card-more', (_e, n) => fn(n)),
   onCardLeave: (fn) => ipcRenderer.on('card-leave', () => fn()),
+  onCardCheer: (fn) => ipcRenderer.on('card-cheer', (_e, c) => fn(c)),
 });

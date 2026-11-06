@@ -18,34 +18,12 @@ final class RingTests: XCTestCase {
         if allow.waitForExistence(timeout: 5) { allow.tap() }
     }
 
-    /// Settings › Apps › DayFlow › Alarms, switched on.
-    func allowAlarmsInSettings() {
-        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
-        settings.terminate()
-        settings.launch()
-        let apps = settings.staticTexts["Apps"]
-        for _ in 0..<6 where !apps.isHittable { settings.swipeUp() }
-        apps.tap()
-        let dayflow = settings.staticTexts["DayFlow"]
-        if !dayflow.waitForExistence(timeout: 5) || !dayflow.isHittable {
-            let search = settings.searchFields.firstMatch
-            if search.waitForExistence(timeout: 3) { search.tap(); search.typeText("DayFlow") }
-        }
-        XCTAssertTrue(dayflow.waitForExistence(timeout: 5))
-        dayflow.tap()
-        let alarms = settings.switches.matching(NSPredicate(format: "label CONTAINS 'Alarm'")).firstMatch
-        XCTAssertTrue(alarms.waitForExistence(timeout: 5), "DayFlow's settings should have Alarms")
-        if alarms.value as? String != "1" { (alarms.switches.firstMatch.exists ? alarms.switches.firstMatch : alarms).tap() }
-        let shot = XCTAttachment(screenshot: settings.screenshot()); shot.name = "settings-alarms"; shot.lifetime = .keepAlways
-        add(shot)
-    }
-
     func testRingEvenOnSilent() throws {
         let app = XCUIApplication.launchFresh(["-uiTestReset", "-uiTestOnboarded", "-uiTestRingSoon"])
         app.buttons["Schedule"].tap()
         app.buttons["List"].tap()
         // It's the latest block of the day, below the sample ones.
-        let block = text(app, "Ring test")
+        let block = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Ring test'")).firstMatch
         XCTAssertTrue(app.collectionViews.firstMatch.waitForExistence(timeout: 5))
         for _ in 0..<3 where !block.isHittable { app.collectionViews.firstMatch.swipeUp() }
         XCTAssertTrue(block.waitForExistence(timeout: 5))
@@ -67,7 +45,7 @@ final class RingTests: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any)["alarms-off-note"].waitForExistence(timeout: 3))
             XCTAssertTrue(text(app, "isn't allowed to set alarms").exists && app.buttons["Open Settings"].exists)
             snap(app, "not-allowed")
-            allowAlarmsInSettings()
+            XCUIApplication.allowAlarmsInSettings()
             app.activate()
             XCTAssertTrue(ring.waitForExistence(timeout: 5))
             flip()
@@ -81,7 +59,8 @@ final class RingTests: XCTestCase {
         // The alarm icon marks it, and an alarm is set.
         XCTAssertTrue(app.images["ring-icon"].waitForExistence(timeout: 5))
         let count = app.staticTexts["alarm-count"]
-        let set = expectation(for: NSPredicate(format: "label == 'alarms 1'"), evaluatedWith: count)
+        // Its Start, Heads-up and Time's up (Start preparation is off) are set as alarms.
+        let set = expectation(for: NSPredicate(format: "label BEGINSWITH 'alarms ' AND label != 'alarms 0'"), evaluatedWith: count)
         wait(for: [set], timeout: 10)
         snap(app, "list")
 

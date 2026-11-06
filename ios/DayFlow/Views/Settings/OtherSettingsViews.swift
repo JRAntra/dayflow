@@ -19,7 +19,8 @@ struct MeetingsSettingsView: View {
             }
             ForEach(MeetingReminderKey.allCases, id: \.self) { key in
                 ReminderSection(spec: Specs.spec(key), example: key == .before ? "\"In \(model.settings.meetings.before.lead ?? 5) min: Standup\"" : "\"Starting now: Standup\"",
-                                reminder: Binding(get: { model.settings.meetings[key] }, set: { r in model.update { $0.meetings[key] = r } }))
+                                reminder: Binding(get: { model.settings.meetings[key] }, set: { r in model.update { $0.meetings[key] = r } }),
+                                many: false)
             }
             Section {
             } footer: {

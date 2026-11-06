@@ -7,42 +7,62 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            // The list updates once a minute (everything in it changes on the minute); only the
+            // dial and its countdown update every second. Redrawing the whole list every second
+            // would cancel a swipe in progress on iOS 17.
+            TimelineView(.everyMinute) { context in
                 let now = context.date
                 let planner = model.planner
-                let blocks = planner.blocksFor(now)
+                let withSkipped = planner.blocksFor(now, includeSkipped: true)
                 let meetings = model.meetings.filter { Calendar.current.isDate($0.start, inSameDayAs: now) }
-                ScrollView {
-                    VStack(spacing: 16) {
-                        Text(now.formatted(.dateTime.month(.wide).day()) + " · " + now.timeText)
-                            .font(.subheadline).foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.leading, 4)
-                            .padding(.top, -8)
-                        notices
-                        VStack(spacing: 0) {
-                            ZStack {
-                                DialView(blocks: blocks, meetings: meetings, now: now)
-                                NowReadout(blocks: blocks, now: now)
-                                    .padding(.horizontal, 84)
-                            }
-                            .frame(maxWidth: 360)
-                            .padding(.vertical, 4)
-                            TurnOffRow(now: now)
-                                .padding(.bottom, 4)
-                        }
-                        .padding(16)
-                        .background(.background, in: .rect(cornerRadius: 22))
-
-                        DayTimeline(blocks: blocks, meetings: meetings, now: now)
+                // A list, so the day's flow gets the system's own swipe to skip.
+                List {
+                    TimelineView(.periodic(from: .now, by: 1)) { tick in
+                        header(tick.date)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+
+                    DayTimeline(blocks: withSkipped, meetings: meetings, now: now)
                 }
+                .listStyle(.insetGrouped)
+                .listSectionSpacing(12)
+                .contentMargins(.horizontal, 16, for: .scrollContent)
                 .background(Color(.systemGroupedBackground))
                 .navigationTitle(now.formatted(.dateTime.weekday(.wide)))
                 .navigationBarTitleDisplayMode(.large)
             }
+        }
+    }
+
+    /// The date and time, today's progress, any notice, and the dial with the countdown.
+    func header(_ now: Date) -> some View {
+        let blocks = model.planner.blocksFor(now)
+        let meetings = model.meetings.filter { Calendar.current.isDate($0.start, inSameDayAs: now) }
+        return VStack(spacing: 16) {
+            HStack(spacing: 8) {
+                Text(now.formatted(.dateTime.month(.wide).day()) + " · " + now.timeText)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                ProgressPill(now: now)
+            }
+            .padding(.leading, 4)
+            .padding(.top, -8)
+            notices
+            VStack(spacing: 0) {
+                ZStack {
+                    DialView(blocks: blocks, meetings: meetings, now: now)
+                    NowReadout(blocks: blocks, now: now)
+                        .padding(.horizontal, 84)
+                }
+                .frame(maxWidth: 360)
+                .padding(.vertical, 4)
+                TurnOffRow(now: now)
+                    .padding(.bottom, 4)
+            }
+            .padding(16)
+            .background(.background, in: .rect(cornerRadius: 22))
         }
     }
 
@@ -69,8 +89,8 @@ struct NowReadout: View {
         VStack(spacing: 6) {
             if blocks.isEmpty {
                 Text("Nothing planned today").font(.headline).multilineTextAlignment(.center)
-                Text(model.blocks.isEmpty ? "Add the phases of your day to get reminders."
-                     : "None of your blocks repeat on \(ScheduleEdits.dayNames[Calendar.current.component(.weekday, from: now) - 1])s.")
+                Text(model.blocks.isEmpty ? "Add events and the blocks of your day to get reminders."
+                     : "Nothing repeats on \(ScheduleEdits.dayNames[Calendar.current.component(.weekday, from: now) - 1])s, or you've skipped it all.")
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button("Plan your day") { model.tab = .schedule }
                     .buttonStyle(.borderedProminent).controlSize(.small).padding(.top, 4)
@@ -88,7 +108,7 @@ struct NowReadout: View {
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).lineLimit(3)
             } else {
                 Text("Done for today").font(.headline)
-                Text("Every block has finished.").font(.caption).foregroundStyle(.secondary)
+                Text("Everything has finished.").font(.caption).foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)
@@ -149,7 +169,34 @@ struct TurnOffMenu<Label: View>: View {
     }
 }
 
-/// The day's flow: blocks and meetings in time order, the current one highlighted.
+/// Today's events done so far, and the streak: "3 of 6 · 🔥 5".
+struct ProgressPill: View {
+    @Environment(AppModel.self) private var model
+    let now: Date
+
+    var body: some View {
+        let r = model.planner.result(on: now)
+        let streak = model.streak
+        if r.total > 0 || streak > 0 {
+            HStack(spacing: 6) {
+                if r.total > 0 {
+                    Label("\(r.done) of \(r.total)", systemImage: r.done == r.total ? "star.fill" : "star")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(r.done > 0 ? Palette.sun : .secondary)
+                }
+                if streak > 0 { Text("🔥 \(streak)").foregroundStyle(.primary) }
+            }
+            .font(.subheadline.weight(.semibold)).monospacedDigit()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(r.done) of \(r.total) events done today\(streak > 0 ? ", \(streak)-day streak" : "")")
+            .accessibilityIdentifier("progress-pill")
+        }
+    }
+}
+
+/// The day's flow: events, blocks and meetings in time order, the current block highlighted.
+/// Each event has a check: done, it turns gold. Swipe a row left to skip it today (struck
+/// through and quiet until tomorrow), and again to bring it back. A section of Today's list.
 struct DayTimeline: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
@@ -164,7 +211,8 @@ struct DayTimeline: View {
         var end: Date { switch self { case .block(let b): b.end; case .meeting(let m): m.end } }
         var title: String { switch self { case .block(let b): b.title; case .meeting(let m): m.title } }
         var isMeeting: Bool { if case .meeting = self { return true }; return false }
-        var isMoment: Bool { if case .block(let b) = self { return b.block.isMoment }; return false }
+        var isEvent: Bool { if case .block(let b) = self { return b.block.isEvent }; return false }
+        var block: Block? { if case .block(let b) = self { return b.block }; return nil }
     }
 
     var items: [Item] {
@@ -176,29 +224,55 @@ struct DayTimeline: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Today's flow").font(.title3.weight(.semibold)).padding(.leading, 4)
+        Section {
             if items.isEmpty {
-                Text(model.calendarAccess ? "No blocks or meetings today." : "No blocks today. To see meetings too, choose calendars in Settings › Calendars.")
+                Text(model.calendarAccess ? "Nothing planned and no meetings today." : "Nothing planned today. To see meetings too, choose calendars in Settings › Calendars.")
                     .font(.subheadline).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(.background, in: .rect(cornerRadius: 16))
-            } else {
-                VStack(spacing: 2) {
-                    ForEach(items) { item in row(item) }
-                }
-                .padding(.vertical, 8)
-                .background(.background, in: .rect(cornerRadius: 16))
-                .animation(.smooth, value: items.first { isCurrent($0) }?.id)
+                    .padding(.vertical, 8)
             }
+            ForEach(items) { item in
+                let done = item.isEvent && item.block.map { model.isDone($0.id) } == true
+                row(item)
+                    .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 10))
+                    .listRowBackground(rowBackground(item, done: done))
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if let b = item.block {
+                            let skipped = model.isSkipped(b.id)
+                            Button {
+                                withAnimation(.snappy) { model.setSkipped(b.id, !skipped) }
+                            } label: {
+                                Label(skipped ? "Bring back" : "Skip today", systemImage: skipped ? "arrow.uturn.backward" : "forward.end")
+                            }
+                            .tint(skipped ? Palette.accent : .gray)
+                        }
+                    }
+            }
+        } header: {
+            Text("Today's flow").font(.title3.weight(.semibold)).foregroundStyle(.primary).textCase(nil)
+                .padding(.leading, -12)
+        }
+        .animation(.smooth, value: items.first { isCurrent($0) }?.id)
+    }
+
+    /// Gold behind a checked-off event, the accent behind the current block.
+    func rowBackground(_ i: Item, done: Bool) -> some View {
+        ZStack {
+            Color(.secondarySystemGroupedBackground)
+            if done { RoundedRectangle(cornerRadius: 12).fill(Palette.sun.opacity(0.16)).padding(4) }
+            else if isCurrent(i) { RoundedRectangle(cornerRadius: 12).fill(Palette.accent.opacity(0.1)).padding(4) }
         }
     }
 
-    func isCurrent(_ i: Item) -> Bool { if case .block = i { return i.start <= now && now < i.end }; return false }
+    func isCurrent(_ i: Item) -> Bool {
+        if case .block(let b) = i, !model.isSkipped(b.id) { return i.start <= now && now < i.end }
+        return false
+    }
 
     func row(_ i: Item) -> some View {
-        let past = now >= i.end
+        let skipped = i.block.map { model.isSkipped($0.id) } ?? false
+        let done = i.isEvent && i.block.map { model.isDone($0.id) } == true
+        let past = now >= i.end && !done
         let current = isCurrent(i)
         let tint = i.isMeeting ? Palette.sun : Palette.accent
         return HStack(spacing: 12) {
@@ -206,17 +280,22 @@ struct DayTimeline: View {
                 .font(.subheadline).foregroundStyle(.secondary)
                 .frame(width: 72, alignment: .trailing)
                 .monospacedDigit()
-            Group {
-                if i.isMeeting { RoundedRectangle(cornerRadius: 3).fill(tint) }
-                else if i.isMoment { Rectangle().fill(tint).rotationEffect(.degrees(45)).scaleEffect(0.8) } // a diamond
-                else { Circle().fill(tint) }
+            if i.isEvent, let b = i.block {
+                CheckButton(done: done, disabled: skipped) { withAnimation(.snappy) { model.setDone(b.id, !done) } }
+                    .frame(width: 24)
+            } else {
+                Group {
+                    if i.isMeeting { RoundedRectangle(cornerRadius: 3).fill(tint) }
+                    else { Circle().fill(tint) }
+                }
+                .frame(width: current ? 12 : 9, height: current ? 12 : 9)
+                .overlay { if current { Circle().stroke(tint.opacity(0.25), lineWidth: 6) } }
+                .frame(width: 24)
             }
-            .frame(width: current ? 12 : 9, height: current ? 12 : 9)
-            .overlay { if current { Circle().stroke(tint.opacity(0.25), lineWidth: 6) } }
-            .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
-                    Text(i.title).font(.body.weight(current ? .semibold : .regular))
+                    Text(i.title).font(.body.weight(current || done ? .semibold : .regular)).strikethrough(skipped)
+                    if i.block?.isRepeat == true { RepeatMark() }
                     if case .block(let b) = i, model.ringsOnSilent(b.block) { RingIcon() }
                 }
                 HStack(spacing: 6) {
@@ -224,10 +303,10 @@ struct DayTimeline: View {
                     case .block(let b): Text(model.typeName(for: b.block))
                     case .meeting: Text("Meeting")
                     }
-                    // A moment happens at its time; blocks and meetings last until their end.
-                    Text(i.isMoment ? "· at \(i.start.timeText)" : "· until \(i.end.timeText)")
+                    // An event happens at its time; blocks and meetings last until their end.
+                    Text(skipped ? "· skipped today" : done ? "· done" : i.isEvent ? "· at \(i.start.timeText)" : "· until \(i.end.timeText)")
                 }
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(done ? Palette.sun : .secondary)
             }
             Spacer(minLength: 4)
             if case .meeting(let m) = i, let url = m.url, now < m.end {
@@ -235,13 +314,35 @@ struct DayTimeline: View {
                     .buttonStyle(.bordered).controlSize(.small).tint(Palette.sun)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background {
-            if current { RoundedRectangle(cornerRadius: 12).fill(Palette.accent.opacity(0.1)).padding(.horizontal, 6) }
-        }
-        .opacity(past ? 0.45 : 1)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
+        .foregroundStyle(skipped ? .secondary : .primary)
+        .opacity(skipped ? 0.5 : past ? 0.45 : 1)
         .accessibilityElement(children: .combine)
+        .accessibilityValue(skipped ? "Skipped today" : done ? "Done" : "")
+        .accessibilityIdentifier("today-\(i.title)")
+    }
+}
+
+/// An event's check in Today: a circle, or a gold star once it's done.
+struct CheckButton: View {
+    let done: Bool
+    var disabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: done ? "star.circle.fill" : "circle")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(done ? Palette.sun : .secondary)
+                .symbolEffect(.bounce, value: done)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .sensoryFeedback(.success, trigger: done) { _, new in new }
+        .accessibilityLabel(done ? "Done" : "Check off")
+        .accessibilityIdentifier("check")
     }
 }
 

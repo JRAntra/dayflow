@@ -2,24 +2,44 @@ import Foundation
 import Testing
 @testable import DayFlowCore
 
-/// Moments (blocks with only a start time) and blocks with their own reminders.
+/// Events (only a start time; they used to be moments) and blocks with their own reminders.
 @Suite struct MomentTests {
     let monday = date(2026, 11, 2)
-    var medicine: Block { Block(id: "m", title: "Take medicine", start: "13:00", end: "", days: [1], type: "default") }
+    var medicine: Block { .event(id: "m", title: "Take medicine", start: "13:00", days: [1], alert: Specs.startingEventAlert) }
 
     func planner(_ extra: [Block], types: [BlockType] = Specs.starterTypes()) -> Planner {
         Planner(blocks: Specs.sampleSchedule() + extra, types: types, meetingReminders: Specs.startingMeetingReminders,
                 calendar: testCalendar, locale: testLocale)
     }
 
-    @Test func aMomentGetsPrepAndStartOnly() {
+    @Test func anEventRingsOnce() {
         var types = Specs.starterTypes()
         types[0].reminders.prep.on = true
         let evs = planner([medicine], types: types).events(on: monday).filter { $0.blockId == "m" }
         #expect(evs.map { "\($0.role.rawValue) \($0.title) | \(plain($0.body))" } == [
-            "prep In 5 min: Take medicine | Get ready. It's at 1:00 PM.",
-            "start Now: Take medicine | It's 1:00 PM, during Focus block.",
+            "event Now: Take medicine | It's 1:00 PM, during Focus block.",
         ])
+        #expect(evs[0].sound == Specs.startingEventAlert.sound)
+    }
+
+    @Test func oldMomentsBecomeEvents() throws {
+        // A moment from version 4: Default's Start was off and its Start preparation on, so the
+        // event takes the preparation's sound. One with its own reminders keeps its Start's.
+        var types = Specs.starterTypes()
+        types[0].reminders.start.on = false
+        types[0].reminders.prep.on = true
+        types[0].reminders.prep.sound = "rooster-crowing"
+        types[0].reminders.prep.fade = true
+        let raw = try JSONValue.decode(Data(#"""
+        [{"id":"a","title":"Pill","start":"13:00","end":"","days":[1],"type":"default","ringOnSilent":true},
+         {"id":"b","title":"Stretch","start":"15:00","days":[1],"type":"own","reminders":{"start":{"on":true,"sound":"class-bell"}}}]
+        """#.utf8))
+        let list = try Sanitize.blocks(raw, typeIds: ["default"], types: types)
+        #expect(list.map(\.isEvent) == [true, true])
+        #expect(list.map(\.type) == ["event", "event"])
+        #expect(list[0].alert == Reminder(on: true, sound: "rooster-crowing", fade: true))
+        #expect(list[0].ringOnSilent == nil && list[0].reminders == nil)
+        #expect(list[1].alert?.sound == "class-bell" && list[1].reminders == nil)
     }
 
     @Test func momentsAreNeverMergedWithBlocks() {
@@ -50,7 +70,7 @@ import Testing
         #expect(moved.start == "13:30" && moved.isMoment)
         #expect(ScheduleEdits.resized(medicine, end: 900) == medicine)
         let after = ScheduleEdits.newBlockAfterLatest([medicine])
-        #expect(after.start == "13:00" && after.end == "13:30" && !after.isMoment)
+        #expect(after.start == "13:00" && after.end == "13:30" && !after.isMoment && after.type == "default")
         #expect(ScheduleEdits.columns([medicine, lunch])["m"] == nil)
     }
 
@@ -75,7 +95,7 @@ import Testing
         #expect(s.blocks.first { $0.id == "m" }?.isMoment == true)
         #expect(s.blocks.first { $0.id == "o" }?.reminders?.prep.on == true)
         // "own" without reminders isn't a type: it falls back to Default.
-        let raw = try JSONValue.decode(Data(#"[{"title":"X","start":"09:00","end":"","days":[1],"type":"own"}]"#.utf8))
+        let raw = try JSONValue.decode(Data(#"[{"title":"X","start":"09:00","end":"10:00","days":[1],"type":"own"}]"#.utf8))
         #expect(try Sanitize.blocks(raw, typeIds: ["default"]).first?.type == "default")
     }
 
@@ -98,7 +118,7 @@ import Testing
         own.start.sound = clip.soundId
         try a.saveBlocks([medicine, Block(id: "o", title: "Run", start: "18:00", end: "19:00", days: [1], type: "own", reminders: own)])
         let export = a.exportPayload()
-        #expect(export["dayflowExport"] == .number(4))
+        #expect(export["dayflowExport"] == .number(5))
         #expect(export["clips"]?.array?.count == 1) // the own reminder's clip travels too
         let b = tempStore()
         let p = try b.readImport(try JSONFile.encode(export), fileName: "x.json")

@@ -11,7 +11,8 @@ let today = { blocks: [], meetings: [] };
 async function load() {
   const t = await dayflow.getToday();
   today = {
-    blocks: t.blocks.map((b) => ({ ...b, start: new Date(b.start), end: new Date(b.end) })),
+    // Skipped ones aren't part of today.
+    blocks: t.blocks.filter((b) => !b.skipped).map((b) => ({ ...b, start: new Date(b.start), end: new Date(b.end) })),
     meetings: t.meetings.map((m) => ({ ...m, start: new Date(m.start), end: new Date(m.end) })),
   };
   render();

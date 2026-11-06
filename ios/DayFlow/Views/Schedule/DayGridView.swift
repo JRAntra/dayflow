@@ -6,6 +6,7 @@ import SwiftUI
 /// - Press and hold a block, then drag, to move it; both ends move together.
 /// - A held block shows handles at its top and bottom edges; drag them to change its times.
 /// - Times snap to 5 minutes with a light tick; a block stays at least 5 minutes long.
+/// - Events are pills at their time; a repeat's events don't drag (change the repeat instead).
 /// - Tap a block to edit it; tap an empty slot to add a 30-minute block there.
 /// - A block that repeats on several days asks "This day only / All N days" after a change.
 struct DayGridView: View {
@@ -46,10 +47,11 @@ struct DayGridView: View {
                         if isToday {
                             NowLine().padding(.leading, Self.labelWidth - 4).zIndex(3)
                         }
-                        ForEach(dayBlocks.filter(\.isMoment)) { m in
-                            MomentMark(block: m, typeName: model.typeName(for: m), rings: model.ringsOnSilent(m), width: width,
-                                       onTap: { edit(BlockEditing(block: m, original: m, day: day)) },
-                                       onCommit: { commit($0, original: m) })
+                        ForEach(dayBlocks.filter(\.isEvent)) { m in
+                            EventMark(block: m, done: isToday && model.isDone(m.id), skipped: isToday && model.isSkipped(m.id),
+                                      width: width,
+                                      onTap: { edit(BlockEditing(block: m, original: m, day: day)) },
+                                      onCommit: { commit($0, original: m) })
                                 .padding(.leading, Self.labelWidth)
                                 .zIndex(1.5)
                         }
@@ -57,6 +59,7 @@ struct DayGridView: View {
                             let col = columns[b.id] ?? (0, 1)
                             let colWidth = width / CGFloat(col.of)
                             GridBlock(block: b, typeName: model.typeName(for: b), rings: model.ringsOnSilent(b), selected: selected == b.id,
+                                      skipped: isToday && model.isSkipped(b.id),
                                       width: colWidth - 3,
                                       onSelect: { withAnimation(.snappy) { selected = b.id } },
                                       onTap: { edit(BlockEditing(block: b, original: b, day: day)) },
@@ -148,13 +151,13 @@ struct NowLine: View {
     }
 }
 
-/// A moment in the grid: a thin line with its name at its time. Hold and drag to move it; it
-/// has no length to resize. Tap to edit it.
-struct MomentMark: View {
+/// An event in the grid: a pill with a bell, its name and its time. Hold and drag to move it
+/// (it has no length to resize), except an event from a repeat: change those in the repeat.
+/// Tap to edit it. On today's weekday, a checked-off event is gold and a skipped one struck through.
+struct EventMark: View {
     let block: Block
-    let typeName: String
-    /// Rings even on silent: shows the alarm icon.
-    var rings = false
+    var done = false
+    var skipped = false
     let width: CGFloat
     let onTap: () -> Void
     let onCommit: (Block) -> Void
@@ -167,40 +170,61 @@ struct MomentMark: View {
 
     var body: some View {
         let b = preview
-        HStack(spacing: 6) {
-            Rectangle().fill(Palette.accent).frame(width: 9, height: 9).rotationEffect(.degrees(45))
-            Text(b.title).font(.caption.weight(.semibold)).lineLimit(1)
-            if rings { RingIcon(size: 9) }
-            Text(dy != nil ? BlockRow.time(b.startMin) : typeName)
+        let tint = done ? Palette.sun : Palette.accent
+        HStack(spacing: 5) {
+            Image(systemName: done ? "star.fill" : "bell.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(tint)
+            Text(b.title).font(.caption.weight(.semibold)).lineLimit(1).strikethrough(skipped)
+            if block.isRepeat { RepeatMark(size: 8) }
+            Text(BlockRow.time(b.startMin))
                 .font(.caption2).foregroundStyle(dy != nil ? Palette.accent : .secondary).monospacedDigit()
-            Rectangle().fill(Palette.accent.opacity(0.6)).frame(height: 1.5)
         }
-        .padding(.horizontal, 4)
-        .frame(width: width, height: 18, alignment: .leading)
-        .background(Color(.systemBackground).opacity(0.85), in: .capsule)
+        .padding(.horizontal, 8)
+        .frame(height: 20)
+        .background(tint.opacity(done ? 0.22 : 0.14), in: .capsule)
+        .background(Color(.systemBackground), in: .capsule)
+        .overlay { Capsule().stroke(tint.opacity(0.5), lineWidth: 1) }
+        .opacity(skipped ? 0.45 : 1)
+        .frame(width: width, alignment: .leading)
         .contentShape(.rect)
         .shadow(color: .black.opacity(dy != nil ? 0.18 : 0), radius: 6, y: 3)
         .gesture(
             LongPressGesture(minimumDuration: 0.3)
                 .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
-                .updating($dy) { v, state, _ in if case .second(true, let d?) = v { state = d.translation.height } }
+                .updating($dy) { v, state, _ in
+                    if !block.isRepeat, case .second(true, let d?) = v { state = d.translation.height }
+                }
                 .onChanged { v in if case .second(true, _) = v { held = true } }
                 .onEnded { v in
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { held = false }
-                    if case .second(true, let d?) = v { onCommit(ScheduleEdits.moved(block, by: minutes(d.translation.height))) }
+                    if !block.isRepeat, case .second(true, let d?) = v { onCommit(ScheduleEdits.moved(block, by: minutes(d.translation.height))) }
                 }
         )
         .simultaneousGesture(TapGesture().onEnded { if held { held = false } else { onTap() } })
         .sensoryFeedback(.selection, trigger: dy.map(minutes))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(block.title), a moment at \(BlockRow.time(block.startMin)), \(typeName)\(rings ? ", \(RingIcon.spoken)" : "")")
-        .accessibilityHint("Double-tap to edit. Swipe up or down for actions to move it.")
+        .accessibilityLabel("\(block.title), an event at \(BlockRow.time(block.startMin))\(block.isRepeat ? ", repeats" : "")\(done ? ", done" : "")\(skipped ? ", skipped today" : "")")
+        .accessibilityHint(block.isRepeat ? "Double-tap to edit the repeat or this event." : "Double-tap to edit. Swipe up or down for actions to move it.")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onTap() }
-        .accessibilityAction(named: "Move 5 minutes earlier") { onCommit(ScheduleEdits.moved(block, by: -5)) }
-        .accessibilityAction(named: "Move 5 minutes later") { onCommit(ScheduleEdits.moved(block, by: 5)) }
+        .modifier(MoveActions(enabled: !block.isRepeat, block: block, onCommit: onCommit))
         // Centred on its time.
-        .padding(.top, max(0, CGFloat(b.startMin) * DayGridView.perMinute - 9))
+        .padding(.top, max(0, CGFloat(b.startMin) * DayGridView.perMinute - 10))
+    }
+}
+
+/// "Move 5 minutes earlier/later" for VoiceOver, when the item can be moved.
+struct MoveActions: ViewModifier {
+    let enabled: Bool
+    let block: Block
+    let onCommit: (Block) -> Void
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .accessibilityAction(named: "Move 5 minutes earlier") { onCommit(ScheduleEdits.moved(block, by: -5)) }
+                .accessibilityAction(named: "Move 5 minutes later") { onCommit(ScheduleEdits.moved(block, by: 5)) }
+        } else {
+            content
+        }
     }
 }
 
@@ -212,6 +236,8 @@ struct GridBlock: View {
     /// Rings even on silent: shows the alarm icon.
     var rings = false
     let selected: Bool
+    /// Skipped today: struck through and greyed.
+    var skipped = false
     let width: CGFloat
     let onSelect: () -> Void
     let onTap: () -> Void
@@ -244,7 +270,7 @@ struct GridBlock: View {
         let dragging = drag != nil
         VStack(alignment: .leading, spacing: 1) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(b.title).font(.caption.weight(.semibold)).lineLimit(compact ? 1 : 2)
+                Text(b.title).font(.caption.weight(.semibold)).lineLimit(compact ? 1 : 2).strikethrough(skipped)
                 if rings { RingIcon(size: 9) }
             }
             if !compact || dragging {
@@ -266,6 +292,7 @@ struct GridBlock: View {
         .overlay { if selected { RoundedRectangle(cornerRadius: 6).stroke(Palette.accent, lineWidth: 1.5) } }
         .overlay(alignment: .top) { if selected { handle(.top).offset(y: -11) } }
         .overlay(alignment: .bottom) { if selected { handle(.bottom).offset(y: 11) } }
+        .opacity(skipped ? 0.45 : 1)
         .scaleEffect(lifted || dragging ? 1.02 : 1, anchor: .center)
         .shadow(color: .black.opacity(dragging ? 0.18 : 0), radius: 8, y: 4)
         // The hold-and-drag is the block's gesture; a tap runs alongside it (a separate tap
