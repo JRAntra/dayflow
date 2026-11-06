@@ -16,4 +16,32 @@ extension XCUIApplication {
         XCTFail("DayFlow didn't start with \(args)", file: file, line: line)
         return app
     }
+
+    /// ＋ in Schedule, then Event, Repeated event or Block.
+    func add(_ kind: String) {
+        buttons["add-menu"].tap()
+        let item = buttons[kind]
+        if !item.waitForExistence(timeout: 3) { buttons["add-menu"].tap() }
+        buttons[kind].tap()
+    }
+
+    /// Settings › Apps › DayFlow › Alarms, switched on.
+    static func allowAlarmsInSettings() {
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.terminate()
+        settings.launch()
+        let apps = settings.staticTexts["Apps"]
+        for _ in 0..<6 where !apps.isHittable { settings.swipeUp() }
+        apps.tap()
+        let dayflow = settings.staticTexts["DayFlow"]
+        if !dayflow.waitForExistence(timeout: 5) || !dayflow.isHittable {
+            let search = settings.searchFields.firstMatch
+            if search.waitForExistence(timeout: 3) { search.tap(); search.typeText("DayFlow") }
+        }
+        XCTAssertTrue(dayflow.waitForExistence(timeout: 5))
+        dayflow.tap()
+        let alarms = settings.switches.matching(NSPredicate(format: "label CONTAINS 'Alarm'")).firstMatch
+        XCTAssertTrue(alarms.waitForExistence(timeout: 5), "DayFlow's settings should have Alarms")
+        if alarms.value as? String != "1" { (alarms.switches.firstMatch.exists ? alarms.switches.firstMatch : alarms).tap() }
+    }
 }

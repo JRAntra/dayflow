@@ -7,6 +7,7 @@ import CryptoKit
 ///     <dir>/block-types.json   [ { id, name, reminders } ]
 ///     <dir>/settings.json      the iPhone's settings
 ///     <dir>/sounds.json        [ { id, name, ext, file } ]
+///     <dir>/progress.json      checks, skips and each day's result (this device only)
 ///     <clips>/<name>.<ext>     your clips, in a folder you can see (On My iPhone › DayFlow › Clips)
 ///     <clips>/Originals/       long songs you took a 30-second piece from
 ///     <backups>/schedule-YYYY-MM-DD-HHMMSS-mmm.json   the newest ten
@@ -19,10 +20,14 @@ public final class DataStore {
     public internal(set) var types: [BlockType] = []
     public internal(set) var settings = Settings()
     public internal(set) var clips: [CustomClip] = []
+    /// What you checked off and skipped, day by day. Kept on this device only, never exported.
+    public internal(set) var progress = DayProgress()
 
     /// 3: blocks can be moments (no end) and can carry their own reminders.
     /// 4: blocks can ring even on silent (`ringOnSilent`).
-    public static let exportVersion = 4
+    /// 5: events (no end) have one `alert` and type "event"; repeats (`series`); reminders can
+    ///    have several `sounds`.
+    public static let exportVersion = 5
     public static let maxImportBytes = 40 * 1024 * 1024
     public static let maxBackups = 10
 
@@ -30,6 +35,7 @@ public final class DataStore {
     var typesFile: URL { dir.appendingPathComponent("block-types.json") }
     var settingsFile: URL { dir.appendingPathComponent("settings.json") }
     var clipsFile: URL { dir.appendingPathComponent("sounds.json") }
+    var progressFile: URL { dir.appendingPathComponent("progress.json") }
     /// Where clips were kept before the Clips folder, as sounds/<id>.<ext>.
     var legacyClipsDir: URL { dir.appendingPathComponent("sounds", isDirectory: true) }
 
@@ -52,7 +58,16 @@ public final class DataStore {
         types = (try? Sanitize.types(read(typesFile) ?? JSONValue.from(Specs.starterTypes()), isSound: isSound)) ?? Specs.starterTypes()
         settings = Sanitize.settings(read(settingsFile), isSound: isSound)
         let raw = read(scheduleFile)?["blocks"] ?? JSONValue.from(Specs.sampleSchedule())
-        blocks = (try? Sanitize.blocks(raw, typeIds: Set(types.map(\.id)), isSound: isSound)) ?? []
+        blocks = (try? Sanitize.blocks(raw, typeIds: Set(types.map(\.id)), types: types, isSound: isSound)) ?? []
+        progress = DayProgress.read(read(progressFile))
+    }
+
+    /// Reads progress again, for changes made while DayFlow wasn't in front (Done on an alarm).
+    public func reloadProgress() { progress = DayProgress.read(read(progressFile)) }
+
+    public func saveProgress(_ p: DayProgress) throws {
+        progress = p
+        try write(progressFile, p)
     }
 
     public func isSound(_ id: String) -> Bool {
@@ -76,8 +91,12 @@ public final class DataStore {
     }
 
     public func saveBlocks(_ list: [Block]) throws {
-        blocks = try Sanitize.blocks(list, typeIds: Set(types.map(\.id)), isSound: isSound)
+        blocks = try Sanitize.blocks(list, typeIds: Set(types.map(\.id)), types: types, isSound: isSound)
         try write(scheduleFile, ["blocks": blocks])
+        // Checks and skips of events that are gone are dropped; one that's been remade keeps its id.
+        let ids = Set(blocks.map(\.id))
+        let today = progress.pruned(keeping: ids)
+        if today != progress { try saveProgress(today) }
     }
 
     /// Saves the type list; blocks whose type was deleted move to Default.
@@ -122,8 +141,9 @@ public final class DataStore {
         return clip
     }
 
-    /// Deletes a clip; any reminder that used it goes back to that reminder's starting sound.
-    /// Returns the names of the reminders that changed, e.g. "Focus · Heads-up".
+    /// Deletes a clip. A reminder that had other sounds too just loses it; one that used only
+    /// this clip goes back to its starting sound. Returns the names of the reminders that went
+    /// back, e.g. "Focus · Heads-up".
     /// With `deleteFile` off, the file is left alone (it's already gone, or the app moves it to
     /// the Trash itself).
     @discardableResult
@@ -133,29 +153,43 @@ public final class DataStore {
         clips.removeAll { $0.id == id }
         try write(clipsFile, clips)
         var reset: [String] = []
+        var changed = false, blocksChanged = false
+        /// Takes the clip out of one reminder. Returns whether it was its only sound.
+        func drop(_ r: inout Reminder, _ starting: String) -> Bool {
+            guard r.choices.contains(clip.soundId) else { return false }
+            changed = true
+            let rest = r.choices.filter { $0 != clip.soundId }
+            r.choices = rest.isEmpty ? [starting] : rest
+            return rest.isEmpty
+        }
         for i in types.indices {
-            for key in TypeReminderKey.allCases where types[i].reminders[key].sound == clip.soundId {
-                types[i].reminders[key].sound = Specs.spec(key).sound
+            for key in TypeReminderKey.allCases where drop(&types[i].reminders[key], Specs.spec(key).sound) {
                 reset.append("\(types[i].name) · \(Specs.spec(key).label)")
             }
         }
-        for key in MeetingReminderKey.allCases where settings.meetings[key].sound == clip.soundId {
-            settings.meetings[key].sound = Specs.spec(key).sound
+        for key in MeetingReminderKey.allCases where drop(&settings.meetings[key], Specs.spec(key).sound) {
             reset.append("Meetings · \(Specs.spec(key).label)")
         }
-        var blocksChanged = false
-        for i in blocks.indices where blocks[i].reminders != nil {
-            for key in TypeReminderKey.allCases where blocks[i].reminders![key].sound == clip.soundId {
-                blocks[i].reminders![key].sound = Specs.spec(key).sound
-                reset.append("\(blocks[i].title) · \(Specs.spec(key).label)")
-                blocksChanged = true
+        let settingsChanged = changed
+        changed = false
+        for i in blocks.indices {
+            if var r = blocks[i].reminders {
+                for key in TypeReminderKey.allCases where drop(&r[key], Specs.spec(key).sound) {
+                    reset.append("\(blocks[i].title) · \(Specs.spec(key).label)")
+                }
+                blocks[i].reminders = r
+            }
+            if var a = blocks[i].alert {
+                if drop(&a, Specs.eventSpec.sound) { reset.append(blocks[i].title) }
+                blocks[i].alert = a
             }
         }
-        if !reset.isEmpty {
+        blocksChanged = changed
+        if settingsChanged {
             try write(typesFile, types)
             try write(settingsFile, settings)
-            if blocksChanged { try write(scheduleFile, ["blocks": blocks]) }
         }
+        if blocksChanged { try write(scheduleFile, ["blocks": blocks]) }
         return reset
     }
 
@@ -167,8 +201,8 @@ public final class DataStore {
     public func exportPayload(backup: Bool = false, now: Date = Date()) -> JSONValue {
         let usedTypes = Set(blocks.map(\.type))
         let list = types.filter { backup || usedTypes.contains($0.id) }
-        let usedSounds = Set(list.flatMap { $0.reminders.all.map(\.sound) } + settings.meetings.all.map(\.sound)
-            + blocks.flatMap { $0.reminders?.all.map(\.sound) ?? [] })
+        let usedSounds = Set(list.flatMap { $0.reminders.all.flatMap(\.choices) } + settings.meetings.all.map(\.sound)
+            + blocks.flatMap { ($0.reminders?.all.flatMap(\.choices) ?? []) + ($0.alert?.choices ?? []) })
         var typeValues: [JSONValue] = []
         for t in list {
             var o = JSONValue.from(t).object ?? [:]

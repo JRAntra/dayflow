@@ -29,6 +29,8 @@ const FILES = {
   sounds: path.join(DATA_DIR, 'sounds.json'),
   windowState: path.join(DATA_DIR, 'window-state.json'),
   blockTypes: path.join(DATA_DIR, 'block-types.json'),
+  // Checks, skips and each day's result, on this Mac only (never exported). Same as the iPhone's.
+  progress: path.join(DATA_DIR, 'progress.json'),
 };
 const SOUNDS_DIR = path.join(DATA_DIR, 'sounds');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
@@ -195,23 +197,35 @@ function removeClip(id) {
   if (!clip) return [];
   customSounds = customSounds.filter((c) => c !== clip);
   writeJSON(FILES.sounds, customSounds);
+  // A reminder with other sounds too just loses this one; one that had only this clip goes back
+  // to its starting sound, and is named in what's returned.
   const reset = [];
+  let changed = false;
+  const drop = (r, fallback) => {
+    const list = choicesOf(r);
+    if (!list.includes(customId(id))) return false;
+    changed = true;
+    const rest = list.filter((x) => x !== customId(id));
+    Object.assign(r, cleanSounds({ sound: rest[0], sounds: rest }, fallback, () => true));
+    if (!r.sounds) delete r.sounds;
+    return !rest.length;
+  };
   const resetIn = (reminders, spec, owner) => {
-    for (const [k, s] of Object.entries(spec)) {
-      if (reminders[k].sound !== customId(id)) continue;
-      reminders[k].sound = s.sound;
-      reset.push(`${owner} · ${s.label}`);
-    }
+    for (const [k, s] of Object.entries(spec)) if (drop(reminders[k], s.sound)) reset.push(`${owner} · ${s.label}`);
   };
   for (const t of blockTypes) resetIn(t.reminders, REMINDERS, t.name);
   resetIn(settings.meetings, MEETING_REMINDERS, 'Meetings');
-  const before = reset.length;
-  for (const b of schedule?.blocks || []) if (b.reminders) resetIn(b.reminders, REMINDERS, b.title);
-  if (reset.length) {
+  const settingsChanged = changed;
+  changed = false;
+  for (const b of schedule?.blocks || []) {
+    if (b.reminders) resetIn(b.reminders, REMINDERS, b.title);
+    if (b.alert && drop(b.alert, EVENT_ALERT.sound)) reset.push(b.title);
+  }
+  if (settingsChanged) {
     writeJSON(FILES.blockTypes, blockTypes);
     writeJSON(FILES.settings, settings);
-    if (reset.length > before) writeJSON(FILES.schedule, schedule);
   }
+  if (changed) writeJSON(FILES.schedule, schedule);
   return reset;
 }
 
@@ -378,16 +392,46 @@ const MEETING_REMINDERS = {
   start: { label: 'Starting now', on: true, sound: 'elegant-door-announcement' },
 };
 
+// One reminder's sounds: `sound` is always the first, and `sounds` lists them all when there's
+// more than one (each time it rings, one is picked at random, never the one it played last).
+// Unusable ones are dropped; with none left it takes the starting sound. many: false keeps one.
+function cleanSounds(r, fallback, isSound, many = true) {
+  const list = [];
+  for (const v of [r?.sound, ...(many && Array.isArray(r?.sounds) ? r.sounds : [])]) {
+    if (typeof v === 'string' && isSound(v) && !list.includes(v)) list.push(v);
+  }
+  if (!list.length) list.push(fallback);
+  return many && list.length > 1 ? { sound: list[0], sounds: list } : { sound: list[0] };
+}
+const choicesOf = (r) => (Array.isArray(r?.sounds) && r.sounds.length ? r.sounds : [r.sound]);
+
 // Cleans one set of reminders; anything missing or unusable takes the starting value.
-function sanitizeReminders(next, spec, isSound = validSound) {
+// Meetings keep one sound each (many: false).
+function sanitizeReminders(next, spec, isSound = validSound, many = spec !== MEETING_REMINDERS) {
   const out = {};
   for (const [key, s] of Object.entries(spec)) {
     const r = next?.[key] || {};
     // fade: the sound starts quiet and grows to your volume, so it doesn't startle you
-    out[key] = { on: flag(r.on, s.on), sound: isSound(r.sound) ? r.sound : s.sound, fade: flag(r.fade, false) };
+    out[key] = { on: flag(r.on, s.on), ...cleanSounds(r, s.sound, isSound, many), fade: flag(r.fade, false) };
     if (s.lead) out[key].lead = clamp(r.lead, 1, 60, DEFAULT_LEAD);
   }
   return out;
+}
+
+// An event's one reminder: its sound(s) and fade. It's always on.
+const EVENT_TYPE = 'event';
+const EVENT_ALERT = { label: 'Alarm', on: true, sound: 'elevator-announcement-bells' };
+const sanitizeAlert = (r, isSound = validSound) => ({ on: true, ...cleanSounds(r, EVENT_ALERT.sound, isSound), fade: flag(r?.fade, false) });
+
+// A repeat's rule: every `every` minutes from `first` to `last`, `last` included when the gap
+// lands on it. Every event it made carries it; `id` ties them together. Same as the iPhone's.
+const REPEAT_EVERY = [1, 720];
+const MAX_REPEAT_EVENTS = 200;
+function sanitizeSeries(v) {
+  if (!v || typeof v !== 'object' || !v.id || !TIME_RE.test(v.first) || !TIME_RE.test(v.last)) return null;
+  const every = Number(v.every);
+  if (!Number.isInteger(every) || every < REPEAT_EVERY[0] || every > REPEAT_EVERY[1] || toMin(v.last) <= toMin(v.first)) return null;
+  return { id: String(v.id), first: v.first, last: v.last, every };
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +441,7 @@ function sanitizeReminders(next, spec, isSound = validSound) {
 const DEFAULT_SETTINGS = {
   sound: true,           // false mutes every reminder sound
   volume: 80,            // 0–100
-  meetings: sanitizeReminders({}, MEETING_REMINDERS),
+  meetings: null, // filled in below, once MEETING_REMINDERS can be checked against
   launchAtLogin: false,
   shortcut: true,        // Control+Alt+D cycles the window modes
   cards: true,           // show a reminder card as well as the macOS notification
@@ -405,6 +449,8 @@ const DEFAULT_SETTINGS = {
   offUntil: null,        // reminders are off until this moment (ms), for 1 or 24 hours
   remindersOff: false,   // reminders are off until you turn them on
 };
+
+DEFAULT_SETTINGS.meetings = sanitizeReminders({}, MEETING_REMINDERS);
 
 function sanitizeSettings(next, prev) {
   return {
@@ -509,6 +555,7 @@ function loadData() {
     settings = sanitizeSettings(raw.settings, DEFAULT_SETTINGS);
     try { blockTypes = sanitizeTypes(raw.blockTypes || starterTypes()); } catch { blockTypes = starterTypes(); }
     schedule = { blocks: sanitizeBlocks(schedule.blocks || []) };
+    loadProgress();
     return;
   }
 
@@ -535,6 +582,7 @@ function loadData() {
   writeJSON(FILES.blockTypes, blockTypes);
   writeJSON(FILES.settings, settings);
   writeJSON(FILES.schedule, schedule);
+  loadProgress();
 }
 
 // ---------------------------------------------------------------------------
@@ -552,23 +600,158 @@ function at(base, hhmm) {
 const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 const fmt = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-// A block with no end is a moment: it happens at its start time. Its end is its start, so it's
-// never "the current block". A block of type "own" carries its own reminders.
+// A block with no end is an event: it happens at its start time and rings once, with its own
+// `alert`. Its end is its start, so it's never "the current block". A block of type "own"
+// carries its own reminders. Skipped ones are left out (unless includeSkipped).
 const OWN_TYPE = 'own';
-const isMoment = (b) => !b.end;
-function blocksFor(date) {
+const isEvent = (b) => !b.end;
+function blocksFor(date, { includeSkipped = false } = {}) {
   const dow = date.getDay();
+  const skipped = new Set(progress.days[dayKey(date)]?.skipped || []);
   return (schedule.blocks || [])
-    .filter((b) => Array.isArray(b.days) && b.days.includes(dow) && (isMoment(b) || toMin(b.end) > toMin(b.start)))
+    .filter((b) => Array.isArray(b.days) && b.days.includes(dow) && (isEvent(b) || toMin(b.end) > toMin(b.start)))
+    .filter((b) => includeSkipped || !skipped.has(b.id))
     .map((b) => ({
-      id: b.id, title: b.title, type: b.type === OWN_TYPE ? OWN_TYPE : typeOf(b.type).id, reminders: b.reminders,
-      moment: isMoment(b), rings: !!b.ringOnSilent, start: at(date, b.start), end: at(date, b.end || b.start),
+      id: b.id, title: b.title, type: isEvent(b) ? EVENT_TYPE : b.type === OWN_TYPE ? OWN_TYPE : typeOf(b.type).id, reminders: b.reminders,
+      moment: isEvent(b), event: isEvent(b), alert: b.alert, series: b.series || null, days: b.days,
+      rings: !isEvent(b) && !!b.ringOnSilent, start: at(date, b.start), end: at(date, b.end || b.start),
     }))
     .sort((a, b) => a.start - b.start);
 }
 // The reminders a block uses: its own, or its type's.
 const remindersFor = (b) => (b.type === OWN_TYPE && b.reminders ? b.reminders : typeOf(b.type).reminders);
-const typeNameFor = (b) => (b.type === OWN_TYPE ? 'Own' : typeOf(b.type).name);
+const typeNameFor = (b) => (b.event ? (b.series ? 'Repeated event' : 'Event') : b.type === OWN_TYPE ? 'Own' : typeOf(b.type).name);
+
+// The times a repeat rings, in minutes.
+function repeatTimes(r) {
+  const out = [];
+  if (!r) return out;
+  for (let m = toMin(r.first); m <= toMin(r.last) && out.length <= MAX_REPEAT_EVENTS; m += r.every) out.push(m);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Several sounds: which one rings this time. Worked out from the time's place in the run of
+// times that reminder rings, so it's the same every time and on the iPhone (SoundPick in
+// DayFlowCore): even places pick freely, odd places avoid both neighbours, two sounds take turns.
+// ---------------------------------------------------------------------------
+
+function fnv(str) {
+  let h = 0x811c9dc5;
+  for (const b of Buffer.from(str, 'utf8')) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+function soundPick(choices, stream, index) {
+  const n = choices.length;
+  if (n < 2) return choices[0];
+  if (n === 2) return choices[(index + (fnv(stream) % 2)) % 2];
+  const free = (i) => fnv(`${stream}|${i}`) % n;
+  if (index % 2 === 0) return choices[free(index)];
+  const avoid = new Set([free(index - 1), free(index + 1)]);
+  const options = [...Array(n).keys()].filter((i) => !avoid.has(i));
+  return choices[options[fnv(`${stream}|${index}|odd`) % options.length]];
+}
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+// stream: the run (a block's Start, a whole repeat); per/slot: a repeat's times in a day and this one's place.
+function pickSound(r, stream, days, date, per = 1, slot = 0) {
+  const choices = choicesOf(r);
+  if (choices.length < 2) return r.sound;
+  const order = WEEK_ORDER.filter((d) => days.includes(d));
+  const pos = Math.max(0, order.indexOf(date.getDay()));
+  const daysSince = Math.round((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(2001, 0, 1)) / 864e5);
+  const week = Math.floor(daysSince / 7);
+  return soundPick(choices, stream, (week * Math.max(order.length, 1) + pos) * per + slot);
+}
+function eventSound(b, date) {
+  const alert = b.alert || { sound: EVENT_ALERT.sound };
+  if (b.series) {
+    const times = repeatTimes(b.series);
+    return pickSound(alert, `series|${b.series.id}`, b.days, date, Math.max(times.length, 1), Math.max(0, times.indexOf(toMin(fmtHHMM(b.start)))));
+  }
+  return pickSound(alert, b.id, b.days, date);
+}
+const fmtHHMM = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+// ---------------------------------------------------------------------------
+// Checking off and skipping, and the streak. Same rules as the iPhone (DayProgress in
+// DayFlowCore): checks and skips belong to their day, so everything is back the next morning;
+// a day counts towards the streak when at least 80% of its events (skipped ones aside) are done.
+// ---------------------------------------------------------------------------
+
+let progress = { since: null, days: {} };
+const KEEP_DAYS = 400;
+const parseDay = (k) => { const [y, m, d] = String(k).split('-').map(Number); return y && m && d ? new Date(y, m - 1, d) : null; };
+function loadProgress() {
+  const raw = readJSON(FILES.progress, {});
+  progress = { since: parseDay(raw.since) ? raw.since : null, days: {} };
+  for (const [k, d] of Object.entries(raw.days || {})) {
+    if (!parseDay(k) || !d || typeof d !== 'object') continue;
+    const ids = (v) => [...new Set((Array.isArray(v) ? v : []).filter((x) => typeof x === 'string'))];
+    const num = (v) => (Number.isFinite(Number(v)) && v !== null && v !== undefined ? Math.max(0, Math.round(Number(v))) : undefined);
+    progress.days[k] = { done: ids(d.done), skipped: ids(d.skipped), total: num(d.total), count: num(d.count) };
+  }
+}
+function changeDay(day, edit) {
+  if (!progress.since || parseDay(day) < parseDay(progress.since)) progress.since = day;
+  const r = progress.days[day] || { done: [], skipped: [] };
+  edit(r);
+  if (!r.done.length && !r.skipped.length && r.total === undefined) delete progress.days[day]; else progress.days[day] = r;
+}
+function setDone(id, on, day = dayKey(new Date())) {
+  changeDay(day, (r) => {
+    r.done = r.done.filter((x) => x !== id);
+    if (on) { r.done.push(id); r.skipped = r.skipped.filter((x) => x !== id); }
+  });
+  saveProgress();
+}
+function setSkipped(id, on, day = dayKey(new Date())) {
+  changeDay(day, (r) => {
+    r.skipped = r.skipped.filter((x) => x !== id);
+    if (on) { r.skipped.push(id); r.done = r.done.filter((x) => x !== id); }
+  });
+  saveProgress();
+}
+// A day's events that count, and how many are done.
+function result(date) {
+  const done = new Set(progress.days[dayKey(date)]?.done || []);
+  const events = blocksFor(date).filter((b) => b.event);
+  return { done: events.filter((b) => done.has(b.id)).length, total: events.length };
+}
+const counts = ({ done, total }) => total > 0 && done >= total * 0.8 - 1e-9;
+function streak(now = new Date()) {
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  let n = counts(result(today)) ? 1 : 0;
+  const since = parseDay(progress.since);
+  if (!since) return n;
+  const d = new Date(today);
+  for (let i = 0; i < KEEP_DAYS; i++) {
+    d.setDate(d.getDate() - 1);
+    if (d < since) break;
+    const rec = progress.days[dayKey(d)];
+    const live = rec?.total === undefined ? result(d) : null;
+    const total = rec?.total ?? live.total;
+    const done = rec?.count ?? live?.done ?? 0;
+    if (!total) continue;
+    if (counts({ done, total })) n += 1; else break;
+  }
+  return n;
+}
+// Saves progress with today's result noted, dropping checks of things no longer planned and
+// days past KEEP_DAYS.
+function saveProgress() {
+  const day = dayKey(new Date());
+  const r = result(new Date());
+  if (r.total > 0 || progress.days[day]) changeDay(day, (x) => { x.total = r.total; x.count = r.done; });
+  const ids = new Set((schedule?.blocks || []).map((b) => b.id));
+  const oldest = new Date(); oldest.setDate(oldest.getDate() - KEEP_DAYS);
+  for (const [k, rec] of Object.entries(progress.days)) {
+    if (parseDay(k) < oldest) { delete progress.days[k]; continue; }
+    rec.done = rec.done.filter((x) => ids.has(x));
+    rec.skipped = rec.skipped.filter((x) => ids.has(x));
+  }
+  writeJSON(FILES.progress, progress);
+}
+const cheerData = () => ({ ...result(new Date()), streak: streak() });
 
 // ---------------------------------------------------------------------------
 // Google Calendar
@@ -740,8 +923,9 @@ function buildEvents(now) {
   const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
   const all = blocksFor(now);
-  // Blocks hand over to blocks; moments are reminded about separately and never merged.
-  const blocks = all.filter((b) => !b.moment);
+  // Blocks hand over to blocks; events ring on their own and are never merged.
+  const blocks = all.filter((b) => !b.event);
+  const pick = (b, role, r) => pickSound(r, `${b.id}|${role}`, b.days, now);
 
   for (const b of blocks) {
     const r = remindersFor(b);
@@ -752,21 +936,21 @@ function buildEvents(now) {
     const prepAt = new Date(b.start - r.prep.lead * MIN_MS);
     if (r.prep.on && prepAt >= midnight) {
       events.push({
-        key: key('prep'), at: prepAt, role: 'prep', block: b, sound: r.prep.sound, fade: r.prep.fade,
+        key: key('prep'), at: prepAt, role: 'prep', block: b, sound: pick(b, 'prep', r.prep), fade: r.prep.fade,
         title: `In ${r.prep.lead} min: ${b.title}`,
         body: `Get ready. It starts at ${fmt(b.start)}.`,
       });
     }
     if (r.start.on) {
       events.push({
-        key: key('start'), at: b.start, role: 'start', block: b, sound: r.start.sound, fade: r.start.fade,
+        key: key('start'), at: b.start, role: 'start', block: b, sound: pick(b, 'start', r.start), fade: r.start.fade,
         title: `Now: ${b.title}`,
         body: prev ? `${prev.title} is done. ${b.title} runs until ${fmt(b.end)}.` : `Runs until ${fmt(b.end)}.`,
       });
     }
     if (r.warn.on && b.end - b.start > r.warn.lead * MIN_MS) {
       events.push({
-        key: key('warn'), at: new Date(b.end - r.warn.lead * MIN_MS), role: 'warn', block: b, sound: r.warn.sound, fade: r.warn.fade,
+        key: key('warn'), at: new Date(b.end - r.warn.lead * MIN_MS), role: 'warn', block: b, sound: pick(b, 'warn', r.warn), fade: r.warn.fade,
         title: `${r.warn.lead} min left: ${b.title}`,
         body: next ? `Next: ${next.title} at ${fmt(next.start)}.` : 'This is your last block today.',
       });
@@ -774,26 +958,18 @@ function buildEvents(now) {
     if (r.end.on) {
       let body = 'That was your last block today.';
       if (next) body = next.start.getTime() === b.end.getTime() ? `${next.title} starts now.` : `Free until ${next.title} at ${fmt(next.start)}.`;
-      events.push({ key: key('end'), at: b.end, role: 'end', block: b, sound: r.end.sound, fade: r.end.fade, title: `Time's up: ${b.title}`, body });
+      events.push({ key: key('end'), at: b.end, role: 'end', block: b, sound: pick(b, 'end', r.end), fade: r.end.fade, title: `Time's up: ${b.title}`, body });
     }
   }
 
   const merged = mergeSameMoment(events);
 
-  // Moments: "In 5 min: Take medicine" and "Now: Take medicine", with the block they fall in.
-  for (const mo of all.filter((b) => b.moment)) {
-    const r = remindersFor(mo);
-    const during = blocks.find((b) => b.start <= mo.start && mo.start < b.end);
-    const key = (role) => `${day}|moment|${mo.id}|${role}`;
-    const prepAt = new Date(mo.start - r.prep.lead * MIN_MS);
-    if (r.prep.on && prepAt >= midnight) {
-      merged.push({ keys: [key('prep')], at: prepAt, role: 'prep', block: mo, sound: r.prep.sound, fade: r.prep.fade,
-        title: `In ${r.prep.lead} min: ${mo.title}`, body: `Get ready. It's at ${fmt(mo.start)}.` });
-    }
-    if (r.start.on) {
-      merged.push({ keys: [key('start')], at: mo.start, role: 'start', block: mo, sound: r.start.sound, fade: r.start.fade,
-        title: `Now: ${mo.title}`, body: during ? `It's ${fmt(mo.start)}, during ${during.title}.` : `It's ${fmt(mo.start)}.` });
-    }
+  // Events: "Now: Take medicine", with the block it falls in. One that's checked off is done.
+  const done = new Set(progress.days[day]?.done || []);
+  for (const e of all.filter((b) => b.event && !done.has(b.id))) {
+    const during = blocks.find((b) => b.start <= e.start && e.start < b.end);
+    merged.push({ keys: [`${day}|event|${e.id}`], at: e.start, role: 'event', block: e, sound: eventSound(e, now), fade: !!e.alert?.fade,
+      title: `Now: ${e.title}`, body: during ? `It's ${fmt(e.start)}, during ${during.title}.` : `It's ${fmt(e.start)}.` });
   }
 
   const m = settings.meetings;
@@ -847,6 +1023,7 @@ function mergeSameMoment(events) {
 // The sound to fall back on if a reminder's clip won't play.
 const FALLBACK_SOUNDS = {
   ...Object.fromEntries(Object.entries(REMINDERS).map(([k, s]) => [k, s.sound])),
+  event: EVENT_ALERT.sound,
   meetBefore: MEETING_REMINDERS.before.sound,
   meetStart: MEETING_REMINDERS.start.sound,
 };
@@ -948,9 +1125,11 @@ function cardData(id, ev) {
     meeting,
     title: ev.title,
     // Preparation already says when in its title, so its line is just the block's time.
-    sub: ev.role === 'prep' ? (b.moment ? `Get ready · at ${fmt(b.start)}` : `Get ready · ${fmt(b.start)} – ${fmt(b.end)}`) : ev.body,
+    sub: ev.role === 'prep' ? `Get ready · ${fmt(b.start)} – ${fmt(b.end)}` : ev.body,
     join: meeting && ev.meeting.url ? 'join' : meeting && ev.meeting.htmlLink ? 'calendar' : null,
     snooze: target ? SNOOZE_CHOICES.filter((m) => target - Date.now() > m * MIN_MS + 20 * 1000) : [],
+    // An event's card has Done, which checks it off.
+    done: ev.role === 'event',
     more: 0,
   };
 }
@@ -1045,6 +1224,16 @@ function cardAction(id, action) {
     }))).popup({ window: card.win });
     return;
   }
+  // Done: the event is checked off, and the card cheers before it goes.
+  if (action === 'done' && ev.role === 'event') {
+    setDone(ev.block.id, true, ev.keys[0].split('|')[0]);
+    send('data-changed');
+    send('stop-sound');
+    clearTimeout(card.timer);
+    if (!card.win.isDestroyed()) card.win.webContents.send('card-cheer', cheerData());
+    card.timer = setTimeout(() => closeCard(id), 2200);
+    return;
+  }
   if (action === 'join' && ev.meeting?.url) shell.openExternal(ev.meeting.url);
   if (action === 'calendar' && ev.meeting?.htmlLink) shell.openExternal(ev.meeting.htmlLink);
   if (action === 'open') showWindow();
@@ -1080,6 +1269,7 @@ function tick() {
   if (day !== currentDay) {
     currentDay = day;
     fired.clear();
+    saveProgress(); // notes the new day's result, and drops very old days
     refreshMeetings();
     send('data-changed');
   }
@@ -1432,7 +1622,9 @@ function updateTray(now) {
 
 // 3: blocks can be moments (no end) and carry their own reminders.
 // 4: blocks can ring even on silent on iPhone (ringOnSilent).
-const EXPORT_VERSION = 4;
+// 5: events (no end) have one `alert` and type "event"; repeats (`series`); reminders can have
+//    several `sounds`.
+const EXPORT_VERSION = 5;
 const MAX_IMPORT_BYTES = 40 * 1024 * 1024;
 const MAX_BACKUPS = 10;
 let pendingImport = null; // what the import preview showed, waiting for Replace
@@ -1446,7 +1638,7 @@ function clipsFor(soundIds) {
   });
 }
 
-const soundsIn = (reminders) => Object.values(reminders).map((r) => r.sound);
+const soundsIn = (reminders) => Object.values(reminders).flatMap(choicesOf);
 
 // A backup carries every block type, so importing it puts the type list back exactly;
 // an ordinary export carries only the types its blocks use. Default is marked, so it
@@ -1455,7 +1647,7 @@ function exportPayload({ backup = false } = {}) {
   const usedTypes = new Set(schedule.blocks.map((b) => b.type));
   const types = blockTypes.filter((t) => backup || usedTypes.has(t.id));
   const used = new Set([...types.flatMap((t) => soundsIn(t.reminders)), ...soundsIn(settings.meetings),
-    ...schedule.blocks.flatMap((b) => (b.reminders ? soundsIn(b.reminders) : []))]);
+    ...schedule.blocks.flatMap((b) => [...(b.reminders ? soundsIn(b.reminders) : []), ...(b.alert ? choicesOf(b.alert) : [])])]);
   return {
     dayflowExport: EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -1541,8 +1733,25 @@ function readImport(file) {
     else missing.push(label);
     return fallback;
   }
+  // Whether a sound can be used: built in, or one of the file's clips (noted against label).
+  function usable(v, label) {
+    if (BUILTIN_SOUNDS.includes(v)) return true;
+    if (typeof v !== 'string' || !v.startsWith('custom:') || !clips.has(v.slice(7))) return false;
+    const fid = v.slice(7);
+    const slots = clipSlots.get(fid) || [];
+    if (!slots.includes(label)) clipSlots.set(fid, [...slots, label]);
+    return true;
+  }
+  // A reminder's sounds checked against the file: with several, the unusable ones are dropped;
+  // only when none is left does it fall back (and say so).
+  function reminderFromFile(r, label, fallback) {
+    const list = [];
+    for (const v of [r?.sound, ...(Array.isArray(r?.sounds) ? r.sounds : [])]) if (!list.includes(v) && usable(v, label)) list.push(v);
+    if (!list.length) list.push(soundFromFile(r?.sound, label, fallback));
+    return { ...r, sound: list[0], ...(list.length > 1 ? { sounds: list } : { sounds: undefined }) };
+  }
   const remindersFromFile = (src, spec, owner) => sanitizeReminders(
-    Object.fromEntries(Object.entries(spec).map(([k, s]) => [k, { ...src?.[k], sound: soundFromFile(src?.[k]?.sound, `${owner} · ${s.label}`, s.sound) }])),
+    Object.fromEntries(Object.entries(spec).map(([k, s]) => [k, reminderFromFile(src?.[k], `${owner} · ${s.label}`, s.sound)])),
     spec,
     (v) => typeof v === 'string',
   );
@@ -1569,10 +1778,17 @@ function readImport(file) {
   if (missing.length) problems.push(`A sound clip is missing from the file, so ${missing.join(', ')} will use the starting sound.`);
 
   // A block's own reminders: their sounds are checked against the file's clips too.
-  const fileBlocks = Array.isArray(data.schedule?.blocks) ? data.schedule.blocks.map((b) => (b && b.type === OWN_TYPE && b.reminders
-    ? { ...b, reminders: remindersFromFile(b.reminders, REMINDERS, String(b.title || 'A block')) } : b)) : data.schedule?.blocks;
+  // And an event's alarm. A moment from an older file becomes an event with its type's sound.
+  const fileBlocks = Array.isArray(data.schedule?.blocks) ? data.schedule.blocks.map((b) => {
+    if (!b || typeof b !== 'object') return b;
+    const out = { ...b };
+    if (b.type === OWN_TYPE && b.reminders) out.reminders = remindersFromFile(b.reminders, REMINDERS, String(b.title || 'A block'));
+    if (b.alert && typeof b.alert === 'object') out.alert = reminderFromFile(b.alert, `${b.title || 'An event'} · ${EVENT_ALERT.label}`, EVENT_ALERT.sound);
+    return out;
+  }) : data.schedule?.blocks;
+  const fileTypeReminders = (id) => (types.get(id) || [...types.values()].find((t) => t.isDefault))?.reminders || typeOf(id).reminders;
   let blocks;
-  try { blocks = sanitizeBlocks(fileBlocks, new Set(types.keys()), fileDefault || DEFAULT_TYPE, (v) => typeof v === 'string'); } catch (e) {
+  try { blocks = sanitizeBlocks(fileBlocks, new Set(types.keys()), fileDefault || DEFAULT_TYPE, (v) => typeof v === 'string', fileTypeReminders); } catch (e) {
     throw new Error(`The schedule in that file has a problem: ${e.message}`);
   }
 
@@ -1587,6 +1803,7 @@ function readImport(file) {
     current: schedule.blocks.length,
     blocks: blocks.map((b) => {
       if (b.type === OWN_TYPE) return { ...b, typeName: 'Own' };
+      if (isEvent(b)) return { ...b, typeName: b.series ? 'Repeated event' : 'Event' };
       const t = types.get(b.type);
       return { ...b, typeName: t ? (t.isDefault ? typeOf(DEFAULT_TYPE).name : t.name) : typeOf(DEFAULT_TYPE).name };
     }),
@@ -1608,13 +1825,19 @@ function applyImport(token, { applySettings, rejectClips = [] }) {
   }
 
   // Copies in the clips a reminder needs; a clip that won't play gives way to the starting sound.
-  const fromFile = (reminders, spec) => Object.fromEntries(Object.entries(reminders).map(([k, r]) => {
-    if (!r.sound.startsWith('custom:')) return [k, r];
-    const fid = r.sound.slice('custom:'.length);
-    const clip = p.clips.get(fid);
-    const sound = clip && !rejectClips.includes(fid) ? customId(installClip(clip.name, clip.ext, clip.buf).id) : spec[k].sound;
-    return [k, { ...r, sound }];
-  }));
+  const oneFromFile = (r, fallback) => {
+    const list = [];
+    for (const v of choicesOf(r)) {
+      if (!v.startsWith('custom:')) { list.push(v); continue; }
+      const fid = v.slice('custom:'.length);
+      const clip = p.clips.get(fid);
+      if (clip && !rejectClips.includes(fid)) list.push(customId(installClip(clip.name, clip.ext, clip.buf).id));
+    }
+    const out = { ...r, ...cleanSounds({ sound: list[0], sounds: list }, fallback, () => true) };
+    if (!out.sounds) delete out.sounds;
+    return out;
+  };
+  const fromFile = (reminders, spec) => Object.fromEntries(Object.entries(reminders).map(([k, r]) => [k, oneFromFile(r, spec[k].sound)]));
 
   // The file's Default is your Default; other types match by name. A backup with its
   // settings applied replaces the list outright.
@@ -1643,10 +1866,13 @@ function applyImport(token, { applySettings, rejectClips = [] }) {
   blockTypes = sanitizeTypes(blockTypes);
   writeJSON(FILES.blockTypes, blockTypes);
 
-  schedule = { blocks: p.blocks.map((b) => (b.type === OWN_TYPE
-    ? { ...b, reminders: fromFile(b.reminders, REMINDERS) } // copies in the clips its own reminders use
-    : { ...b, type: typeIds.get(b.type) || DEFAULT_TYPE })) };
+  schedule = { blocks: p.blocks.map((b) => {
+    if (isEvent(b)) return { ...b, alert: oneFromFile(b.alert, EVENT_ALERT.sound) }; // copies in the clips its alarm uses
+    if (b.type === OWN_TYPE) return { ...b, reminders: fromFile(b.reminders, REMINDERS) }; // and its own reminders
+    return { ...b, type: typeIds.get(b.type) || DEFAULT_TYPE };
+  }) };
   writeJSON(FILES.schedule, schedule);
+  saveProgress();
 
   if (applySettings && p.settings) {
     settings = sanitizeSettings({ ...settings, volume: p.settings.volume, meetings: fromFile(p.settings.meetings, MEETING_REMINDERS) }, settings);
@@ -1662,9 +1888,14 @@ function applyImport(token, { applySettings, rejectClips = [] }) {
 // ---------------------------------------------------------------------------
 
 // Every block has a type: one that isn't in typeIds becomes the fallback (normally Default).
-// No end (missing, null or empty) makes a moment. Type "own" keeps the block's own reminders
-// (and falls back too if it has none). isSound checks those reminders' sounds.
-function sanitizeBlocks(blocks, typeIds = new Set(blockTypes.map((t) => t.id)), fallback = DEFAULT_TYPE, isSound = validSound) {
+// Type "own" keeps the block's own reminders (and falls back too if it has none). isSound checks
+// those reminders' sounds.
+// No end (missing, null or empty) makes an event: type "event", one `alert`, maybe a repeat's
+// `series`. A moment from before events existed becomes one with the sound and fade of its Start
+// reminder (or Start preparation's, if only that was on), from its own reminders or its type's
+// (typeReminders looks a type up).
+function sanitizeBlocks(blocks, typeIds = new Set(blockTypes.map((t) => t.id)), fallback = DEFAULT_TYPE, isSound = validSound,
+  typeReminders = (id) => typeOf(id).reminders) {
   if (!Array.isArray(blocks)) throw new Error('Schedule must be a list.');
   return blocks.map((b, i) => {
     const title = String(b.title || '').trim().slice(0, 120);
@@ -1673,7 +1904,22 @@ function sanitizeBlocks(blocks, typeIds = new Set(blockTypes.map((t) => t.id)), 
     if (!TIME_RE.test(b.start) || (end && !TIME_RE.test(end))) throw new Error(`"${title}" has an invalid time.`);
     if (end && toMin(end) <= toMin(b.start)) throw new Error(`"${title}" must end after it starts.`);
     const days = [...new Set((b.days || []).map(Number).filter((d) => d >= 0 && d <= 6))].sort();
-    const out = { id: String(b.id || crypto.randomUUID()), title, start: b.start, end, days, type: typeIds.has(String(b.type)) ? String(b.type) : fallback };
+    const id = String(b.id || crypto.randomUUID());
+    if (!end) {
+      let alert;
+      if (b.alert && typeof b.alert === 'object') {
+        alert = sanitizeAlert(b.alert, isSound);
+      } else {
+        const r = b.type === OWN_TYPE && b.reminders && typeof b.reminders === 'object'
+          ? sanitizeReminders(b.reminders, REMINDERS, isSound) : typeReminders(String(b.type));
+        alert = sanitizeAlert(!r.start.on && r.prep.on ? r.prep : r.start, () => true);
+      }
+      const out = { id, title, start: b.start, end: '', days, type: EVENT_TYPE, alert };
+      const series = sanitizeSeries(b.series);
+      if (series) out.series = series;
+      return out;
+    }
+    const out = { id, title, start: b.start, end, days, type: typeIds.has(String(b.type)) ? String(b.type) : fallback };
     if (b.type === OWN_TYPE && b.reminders && typeof b.reminders === 'object') {
       out.type = OWN_TYPE;
       out.reminders = sanitizeReminders(b.reminders, REMINDERS, isSound);
@@ -1701,24 +1947,45 @@ function registerIpc() {
     platform: process.platform,
   }));
 
-  ipcMain.handle('get-today', () => ({
-    // warnMin and prepMin (0 when that reminder is off) let the mini timer show the heads-up and "Get ready".
-    blocks: blocksFor(new Date()).map((b) => {
-      const r = remindersFor(b);
-      return {
-        ...b,
-        start: b.start.toISOString(),
-        end: b.end.toISOString(),
-        warnMin: r.warn.on && !b.moment ? r.warn.lead : 0,
-        prepMin: r.prep.on ? r.prep.lead : 0,
-      };
-    }),
-    meetings,
-  }));
+  ipcMain.handle('get-today', () => {
+    const now = new Date();
+    const rec = progress.days[dayKey(now)] || { done: [], skipped: [] };
+    return {
+      // warnMin and prepMin (0 when that reminder is off) let the mini timer show the heads-up
+      // and "Get ready". Skipped ones are included for the agenda, marked; the dial leaves them out.
+      blocks: blocksFor(now, { includeSkipped: true }).map((b) => {
+        const r = b.event ? null : remindersFor(b);
+        return {
+          ...b,
+          start: b.start.toISOString(),
+          end: b.end.toISOString(),
+          warnMin: r && r.warn.on ? r.warn.lead : 0,
+          prepMin: r && r.prep.on ? r.prep.lead : 0,
+          done: rec.done.includes(b.id),
+          skipped: rec.skipped.includes(b.id),
+        };
+      }),
+      meetings,
+      ...cheerData(),
+    };
+  });
+
+  // Checking an event off (returns the cheer-up's numbers), and skipping for today.
+  ipcMain.handle('set-done', (_e, id, on) => {
+    setDone(String(id), !!on);
+    updateTray(new Date());
+    return cheerData();
+  });
+  ipcMain.handle('set-skipped', (_e, id, on) => {
+    setSkipped(String(id), !!on);
+    updateTray(new Date());
+    return cheerData();
+  });
 
   ipcMain.handle('save-schedule', (_e, blocks) => {
     schedule = { blocks: sanitizeBlocks(blocks) };
     writeJSON(FILES.schedule, schedule);
+    saveProgress(); // checks of events that are gone go too
     send('data-changed');
     return schedule;
   });

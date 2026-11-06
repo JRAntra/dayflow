@@ -5,6 +5,7 @@ import SwiftUI
 /// the bottom), meetings as a thin amber ring outside it, hour marks inside, and a hand for now.
 /// The current block is thicker and brighter; finished ones fade. The arcs draw in on first view.
 struct DialView: View {
+    @Environment(AppModel.self) private var model
     let blocks: [DayBlock]
     let meetings: [Meeting]
     let now: Date
@@ -44,7 +45,7 @@ struct DialView: View {
                     ticks(r)
                     // Neighbouring arcs' rounded ends overlap, so finished and upcoming blocks are
                     // each drawn as one layer and faded together, like the Mac's opaque colours.
-                    let spans = blocks.filter { !$0.block.isMoment }
+                    let spans = blocks.filter { !$0.block.isEvent }
                     arcs(spans.filter { now >= $0.end }, r).opacity(0.22)
                     arcs(spans.filter { now < $0.start }, r).opacity(0.5)
                     // A thin line where one block hands over to the next, so each reads on its own.
@@ -57,10 +58,10 @@ struct DialView: View {
                     }
                     .stroke(Color(.systemBackground), style: StrokeStyle(lineWidth: 2.5, lineCap: .butt))
                     .opacity(drawn ? 1 : 0)
-                    // Moments: a dot on the ring at their time.
-                    ForEach(blocks.filter(\.block.isMoment)) { m in
+                    // Events: a dot on the ring at their time, gold once checked off.
+                    ForEach(blocks.filter(\.block.isEvent)) { m in
                         Circle()
-                            .fill(now >= m.start ? Palette.accent.opacity(0.5) : Palette.accent)
+                            .fill(model.isDone(m.id) ? Palette.sun : now >= m.start ? Palette.accent.opacity(0.5) : Palette.accent)
                             .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
                             .frame(width: 12, height: 12)
                             .position(Self.polar(Self.rBlock, angle(m.start, r)))

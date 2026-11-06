@@ -19,6 +19,14 @@ struct PieceRequest: Identifiable {
     var inFolder: Bool
 }
 
+/// The cheer-up after checking an event off: "Nice! 3 of 6 done today · 5-day streak 🔥".
+struct Cheer: Identifiable, Equatable {
+    let id = UUID()
+    var done: Int
+    var total: Int
+    var streak: Int
+}
+
 /// A short message at the bottom of the screen, sometimes with Undo.
 struct Banner: Identifiable {
     let id = UUID()
@@ -48,6 +56,10 @@ final class AppModel {
     /// A long file you're choosing 30 seconds of.
     var pieceRequest: PieceRequest?
     private(set) var meetings: [Meeting] = []
+    /// Checks and skips, day by day (this iPhone only).
+    private(set) var progress = DayProgress()
+    /// The cheer-up showing now.
+    var cheer: Cheer?
 
     var tab: AppTab = .today
     var banner: Banner?
@@ -68,6 +80,7 @@ final class AppModel {
 
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var bannerTask: Task<Void, Never>?
+    @ObservationIgnored private var cheerTask: Task<Void, Never>?
 
     init() {
         let fm = FileManager.default
@@ -78,6 +91,8 @@ final class AppModel {
         // screens with `-uiTestOnboarded`.
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-uiTestReset") {
+            // Remembered view choices (List or Day, Group repeats, a pending cheer-up) start over too.
+            for key in ["schedule.mode", "schedule.groupRepeats", Self.pendingCheerKey] { UserDefaults.standard.removeObject(forKey: key) }
             for url in [support, docs.appendingPathComponent("Backups"), docs.appendingPathComponent("Clips"), SoundLibrary.soundsDir] {
                 do { if fm.fileExists(atPath: url.path) { try fm.removeItem(at: url) } } catch {
                     NSLog("DFDEBUG reset couldn't remove \(url.lastPathComponent): \(error)")
@@ -104,15 +119,28 @@ final class AppModel {
         sync()
         calendarAccess = calendarService.hasAccess
         #if DEBUG
-        // `-uiTestRingSoon` adds a moment, "Ring test", two minutes from now, to set ringing.
-        if args.contains("-uiTestRingSoon") {
-            let now = Date(), cal = Calendar.current
-            let m = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now) + 2
-            if m < 24 * 60 {
-                let b = Block(title: "Ring test", start: HHMM.string(m), end: "", days: [cal.component(.weekday, from: now) - 1],
-                              type: Specs.defaultType)
-                try? store.saveBlocks(store.blocks + [b]); sync()
+        // `-uiTestRingSoon` adds a block, "Ring test", starting two minutes from now, to set ringing.
+        // `-uiTestEventSoon` adds an event, "Pill", two minutes from now; `-uiTestEvents` adds
+        // three events later today (late enough not to ring during a test).
+        let now = Date(), cal = Calendar.current
+        let nowMin = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now)
+        let today = [cal.component(.weekday, from: now) - 1]
+        if args.contains("-uiTestRingSoon"), nowMin + 12 < 24 * 60 {
+            let b = Block(title: "Ring test", start: HHMM.string(nowMin + 2), end: HHMM.string(nowMin + 12), days: today,
+                          type: Specs.defaultType)
+            try? store.saveBlocks(store.blocks + [b]); sync()
+        }
+        if args.contains("-uiTestEventSoon"), nowMin + 2 < 24 * 60 {
+            let e = Block.event(title: "Pill", start: HHMM.string(nowMin + 2), days: today, alert: Specs.startingEventAlert)
+            try? store.saveBlocks(store.blocks + [e]); sync()
+            Task { _ = await allowAlarms(); refreshSoon() } // as saving a first event does
+        }
+        if args.contains("-uiTestEvents") {
+            let start = min(nowMin + 60, 23 * 60)
+            let list = ["Vitamins", "Stretch", "Call home"].enumerated().map { i, t in
+                Block.event(title: t, start: HHMM.string(min(start + i * 15, 23 * 60 + 59)), days: today, alert: Specs.startingEventAlert)
             }
+            try? store.saveBlocks(store.blocks + list); sync()
         }
         #endif
     }
@@ -135,19 +163,24 @@ final class AppModel {
     #endif
 
     var planner: Planner {
-        Planner(blocks: blocks, types: types, meetingReminders: settings.meetings, meetings: meetings)
+        Planner(blocks: blocks, types: types, meetingReminders: settings.meetings, meetings: meetings, progress: progress)
     }
 
     func typeOf(_ id: String) -> BlockType { store.typeOf(id) }
-    /// "Focus", or "Own" for a block with its own reminders.
-    func typeName(for b: Block) -> String { b.hasOwnReminders ? Specs.ownTypeName : typeOf(b.type).name }
+    /// "Focus", "Own" for a block with its own reminders, "Event" or "Repeated event".
+    func typeName(for b: Block) -> String { planner.typeName(for: b) }
     func soundName(_ id: String) -> String { Specs.soundName(id, clips: clips) }
+    /// "Soft bell", or "3 sounds, shuffled".
+    func soundsName(_ r: Reminder) -> String {
+        r.choices.count > 1 ? "\(r.choices.count) sounds, shuffled" : soundName(r.sound)
+    }
 
     private func sync() {
         blocks = store.blocks
         types = store.types
         settings = store.settings
         clips = store.clips
+        progress = store.progress
     }
 
     // MARK: Refreshing
@@ -174,6 +207,10 @@ final class AppModel {
         meetings = calendarService.meetings(calendarIds: settings.calendars ?? [])
         notificationStatus = await ReminderScheduler.authorization()
         alarmAccess = AlarmScheduler.access
+        // Done on an alarm may have checked something off while DayFlow was in the background.
+        store.reloadProgress()
+        noteToday()
+        sync()
         let planner = self.planner
         if settings.onboarded {
             scheduledCount = await ReminderScheduler.reschedule(planner: planner, store: store)
@@ -235,6 +272,14 @@ final class AppModel {
     func saveBlock(_ edited: Block, original: Block?, day: Int? = nil, allDays: Bool = true) {
         let previous = blocks
         var list = blocks
+        // An event taken out of its repeat has a new id: today's check or skip goes with it.
+        if let original, original.id != edited.id, original.isRepeat, !edited.isRepeat {
+            var p = progress
+            let key = planner.dayKey(Date())
+            if p.isDone(original.id, on: key) { p.setDone(edited.id, true, day: key) }
+            if p.isSkipped(original.id, on: key) { p.setSkipped(edited.id, true, day: key) }
+            try? store.saveProgress(p)
+        }
         if let original, list.contains(where: { $0.id == original.id }) {
             list = ScheduleEdits.apply(edited, original: original, day: day ?? -1, allDays: day == nil || allDays, in: list)
         } else {
@@ -243,12 +288,103 @@ final class AppModel {
         saveBlocks(list, message: original == nil ? "Added \(edited.title)" : "Saved \(edited.title)", undoTo: previous)
     }
 
+    /// Saves a repeat: its events are made (again) from `rule`, replacing any it had.
+    func saveRepeat(title: String, days: [Int], alert: Reminder, rule: RepeatRule, isNew: Bool) {
+        let previous = blocks
+        let events = ScheduleEdits.makeRepeat(title: title, days: days, alert: alert, rule: rule)
+        saveBlocks(ScheduleEdits.replacingRepeat(rule.id, with: events, in: blocks),
+                   message: "\(isNew ? "Added" : "Saved") \(events.count) \(title) events", undoTo: previous)
+    }
+
+    /// Deletes every event of a repeat, with Undo.
+    func deleteRepeat(_ id: String) {
+        let previous = blocks
+        let events = ScheduleEdits.repeatEvents(id, in: blocks)
+        saveBlocks(ScheduleEdits.replacingRepeat(id, with: [], in: blocks),
+                   message: "Deleted \(events.count) \(events.first?.title ?? "") events", undoTo: previous)
+    }
+
     /// Deletes a block (or, from the day view, takes it off just that day) with Undo.
     func deleteBlock(_ b: Block, day: Int? = nil) {
         let previous = blocks
         let list = ScheduleEdits.removing(b, day: day, from: blocks)
         let onlyDay = day != nil && b.days.count > 1
         saveBlocks(list, message: onlyDay ? "Removed \(b.title) from \(ScheduleEdits.dayNames[day!])s" : "Deleted \(b.title)", undoTo: previous)
+    }
+
+    // MARK: Checking off and skipping
+
+    var todayKey: String { planner.dayKey(Date()) }
+    func isDone(_ id: String) -> Bool { progress.isDone(id, on: todayKey) }
+    func isSkipped(_ id: String) -> Bool { progress.isSkipped(id, on: todayKey) }
+    var streak: Int { planner.streak(at: Date()) }
+
+    /// Checks an event off for today (its alarm today is cancelled), or unchecks it (the alarm
+    /// comes back if its time hasn't passed). Checking off shows the cheer-up.
+    func setDone(_ id: String, _ on: Bool) {
+        var p = progress
+        p.setDone(id, on, day: todayKey)
+        saveProgress(p)
+        if on { showCheer() }
+    }
+
+    /// Skips an event or block today, or brings it back.
+    func setSkipped(_ id: String, _ on: Bool) {
+        var p = progress
+        p.setSkipped(id, on, day: todayKey)
+        saveProgress(p)
+        let title = blocks.first { $0.id == id }?.title ?? "It"
+        show(on ? "Skipped \(title) today. It's back tomorrow." : "\(title) is back today")
+    }
+
+    private func saveProgress(_ p: DayProgress) {
+        do {
+            try store.saveProgress(p)
+            sync()
+            noteToday()
+            refreshSoon()
+        } catch { showError(error) }
+    }
+
+    /// Keeps today's result for the streak.
+    private func noteToday() {
+        let p = planner.noting(Date())
+        if p != store.progress { try? store.saveProgress(p) }
+        progress = store.progress
+    }
+
+    func showCheer() {
+        let r = planner.result(on: Date())
+        cheer = Cheer(done: r.done, total: r.total, streak: streak)
+        cheerTask?.cancel()
+        let id = cheer!.id
+        cheerTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.2))
+            guard !Task.isCancelled, self?.cheer?.id == id else { return }
+            withAnimation(.smooth) { self?.cheer = nil }
+        }
+    }
+
+    /// Done on an event's alarm or notification: checks it off without opening DayFlow. The
+    /// cheer-up shows the next time DayFlow is in front.
+    func doneFromAlarm(_ id: String, day: String) {
+        store.reloadProgress()
+        sync()
+        var p = progress
+        p.setDone(id, true, day: day)
+        try? store.saveProgress(p)
+        sync()
+        noteToday()
+        if day == todayKey { UserDefaults.standard.set(true, forKey: Self.pendingCheerKey) }
+    }
+
+    static let pendingCheerKey = "pendingCheer"
+
+    /// Shows the cheer-up for a Done tapped while DayFlow was in the background.
+    func showPendingCheer() {
+        guard UserDefaults.standard.bool(forKey: Self.pendingCheerKey) else { return }
+        UserDefaults.standard.set(false, forKey: Self.pendingCheerKey)
+        showCheer()
     }
 
     // MARK: Block types
@@ -319,7 +455,8 @@ final class AppModel {
     // MARK: Notifications, alarms and calendars
 
     /// Shows the alarm icon: the block rings even on silent, and this iPhone can set alarms.
-    func ringsOnSilent(_ b: Block) -> Bool { b.ringsOnSilent && alarmAccess != .unsupported }
+    /// (Every event rings as an alarm, so events don't show it.)
+    func ringsOnSilent(_ b: Block) -> Bool { !b.isEvent && b.ringsOnSilent && alarmAccess != .unsupported }
 
     /// Asks to set alarms the first time "Ring even on silent" is turned on. Returns whether
     /// alarms are allowed.

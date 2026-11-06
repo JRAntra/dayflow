@@ -25,7 +25,9 @@ final class TourTests: XCTestCase {
         app.buttons["Echo bells"].tap()
         snap(app, "tour-sound-picker")
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(row(app, "Sound, Echo bells").waitForExistence(timeout: 5) || app.staticTexts["Echo bells"].exists, "The chosen sound should show on the type page")
+        // Tapping a sound's name checks it alongside the one it had: two sounds, shuffled.
+        XCTAssertTrue(row(app, "Sounds, 2 sounds, shuffled").waitForExistence(timeout: 5) || app.staticTexts["2 sounds, shuffled"].exists,
+                      "The chosen sounds should show on the type page")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         row(app, "Meetings").tap(); sleep(1); snap(app, "tour-meetings")
@@ -52,7 +54,7 @@ final class TourTests: XCTestCase {
         let app = XCUIApplication.launchFresh(["-uiTestReset", "-uiTestOnboarded"])
         app.buttons["Schedule"].tap()
         app.buttons["List"].tap()
-        app.buttons["Add block"].tap()
+        app.add("Block")
         app.textFields["Name"].typeText("Piano")
         row(app, "Type").tap()
         app.buttons["New type…"].tap()

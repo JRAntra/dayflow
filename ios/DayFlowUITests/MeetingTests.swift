@@ -22,7 +22,10 @@ final class MeetingTests: XCTestCase {
         add(shot)
 
         app.buttons["Today"].tap()
+        // Today's flow is a list below the dial: scroll down to the meeting.
         let meeting = app.staticTexts["Standup"]
+        _ = app.buttons["Turn off reminders…"].waitForExistence(timeout: 8)
+        for _ in 0..<6 where !meeting.exists { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(meeting.waitForExistence(timeout: 8), "The meeting should be on Today")
         XCTAssertTrue(app.buttons["Join"].exists, "The Meet link in the notes should give a Join button")
         app.swipeUp()

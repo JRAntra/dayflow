@@ -32,7 +32,7 @@ struct DayFlowApp: App {
         .onChange(of: scenePhase) { _, phase in
             model.isForeground = phase == .active
             if phase == .active {
-                Task { await model.refresh() }
+                Task { await model.refresh(); model.showPendingCheer() }
             } else if phase == .background {
                 BackgroundRefresh.schedule()
             }
@@ -59,9 +59,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let info = response.notification.request.content.userInfo
         let url = (info["url"] as? String).flatMap(URL.init(string:))
         let meetingStart = (info["meetingStart"] as? Double).map(Date.init(timeIntervalSinceReferenceDate:))
+        let blockId = info["blockId"] as? String, day = info["day"] as? String
         await MainActor.run {
             let model = AppModel.shared
             switch response.actionIdentifier {
+            case ReminderScheduler.doneAction:
+                if let blockId, let day { model.doneFromAlarm(blockId, day: day) }
             case ReminderScheduler.joinAction:
                 if let url { UIApplication.shared.open(url) }
             case ReminderScheduler.calendarAction:

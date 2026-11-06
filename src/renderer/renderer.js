@@ -14,7 +14,9 @@ const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const state = {
-  today: { blocks: [], meetings: [] },
+  // blocks: what's on today, without skipped ones (the dial and the countdown); all: with them
+  // (the agenda); result: { done, total, streak } for the progress line and the cheer-up.
+  today: { blocks: [], all: [], meetings: [], result: { done: 0, total: 0, streak: 0 } },
   schedule: { blocks: [] },
   settings: {},
   google: {},
@@ -95,10 +97,14 @@ async function loadAll() {
 let dialKey = '';
 async function loadToday() {
   const t = await dayflow.getToday();
+  const all = t.blocks.map((b) => ({ ...b, kind: 'block', start: new Date(b.start), end: new Date(b.end) }));
   state.today = {
-    blocks: t.blocks.map((b) => ({ ...b, kind: 'block', start: new Date(b.start), end: new Date(b.end) })),
+    all,
+    blocks: all.filter((b) => !b.skipped),
     meetings: t.meetings.map((m) => ({ ...m, kind: 'meeting', start: new Date(m.start), end: new Date(m.end) })),
+    result: { done: t.done, total: t.total, streak: t.streak },
   };
+  renderProgress();
   dialKey = ''; // rebuild the dial for the new data
   renderAgenda();
   renderNow();
@@ -164,10 +170,10 @@ function renderDial(now) {
         }
       }
       const gap = 3.2; // degrees between neighbouring arcs, so rounded ends don't touch
-      // Moments: a dot on the ring at their time.
-      for (const mo of state.today.blocks.filter((b) => b.moment)) {
+      // Events: a dot on the ring at their time, gold once checked off.
+      for (const mo of state.today.blocks.filter((b) => b.event)) {
         const [x, y] = polar(R_BLOCK, angle(mo.start));
-        parts.push(`<circle class="dial-moment" data-start="${+mo.start}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="6"><title>${esc(mo.title)}, at ${fmt(mo.start)}</title></circle>`);
+        parts.push(`<circle class="dial-moment${mo.done ? ' done' : ''}" data-start="${+mo.start}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="6"><title>${esc(mo.title)}, at ${fmt(mo.start)}${mo.done ? ', done' : ''}</title></circle>`);
       }
       for (const b of state.today.blocks.filter((x) => !x.moment)) {
         const a0 = angle(b.start) + gap / 2;
@@ -262,8 +268,8 @@ function renderNow() {
     title.textContent = 'Nothing planned today';
     rollText(count, '');
     note.textContent = state.schedule.blocks.length
-      ? `None of your blocks repeat on ${DAY_NAMES[now.getDay()]}s.`
-      : 'Add the phases of your day to get reminders.';
+      ? `Nothing repeats on ${DAY_NAMES[now.getDay()]}s, or you've skipped it all.`
+      : 'Add events and the blocks of your day to get reminders.';
     $('now-plan').hidden = false;
   } else if (current) {
     badge.hidden = false;
@@ -281,7 +287,7 @@ function renderNow() {
   } else {
     title.textContent = 'Done for today';
     rollText(count, '');
-    note.textContent = 'Every block has finished.';
+    note.textContent = 'Everything has finished.';
   }
   renderDial(now);
 }
@@ -290,30 +296,59 @@ let currentShown = null;
 // The alarm clock beside a block that rings even on silent on iPhone.
 const RING_ICON = '<svg class="ring-icon" viewBox="0 0 16 16" role="img" aria-label="Rings even on silent on iPhone"><title>Rings even on silent on iPhone</title><circle cx="8" cy="9" r="5.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 6.3V9l1.8 1.2M2.2 4.2 4.4 2.3M13.8 4.2 11.6 2.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
+const STAR_ICON = '<svg class="star-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.6l1.9 4.1 4.5.5-3.4 3 1 4.4L8 11.3l-3.9 2.3 1-4.4-3.4-3 4.5-.5z" fill="currentColor"/></svg>';
+const BELL_ICON = '<svg class="bell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2a3.8 3.8 0 0 0-3.8 3.8v2.6L3 10.6h10l-1.2-2V6A3.8 3.8 0 0 0 8 2.2zM6.5 12.2a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+const REPEAT_ICON = '<svg class="repeat-icon" viewBox="0 0 16 16" role="img" aria-label="Repeats"><title>From a repeat</title><path d="M3 7a4 4 0 0 1 7-2.6M13 9a4 4 0 0 1-7 2.6M10.5 2v2.7H7.8M5.5 14v-2.7h2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+// Today's flow: events, blocks and meetings in time order. Each event has a check (done, it
+// turns gold); each event and block has a switch: off skips it today, struck through and quiet
+// until tomorrow.
 function renderAgenda() {
   const now = new Date();
-  const items = [...state.today.blocks, ...state.today.meetings].sort((a, b) => a.start - b.start || (a.kind === 'meeting' ? 1 : -1));
-  const current = items.find((i) => i.kind === 'block' && now >= i.start && now < i.end);
+  const items = [...state.today.all, ...state.today.meetings].sort((a, b) => a.start - b.start || (a.kind === 'meeting' ? 1 : -1));
+  const current = items.find((i) => i.kind === 'block' && !i.skipped && now >= i.start && now < i.end);
   const draw = () => {
     const list = $('agenda-list');
     list.innerHTML = items.map((i, idx) => {
-      const status = now >= i.end ? 'past' : now >= i.start ? 'current' : '';
+      const status = i === current ? 'current' : !i.done && !i.skipped && now >= i.end ? 'past' : '';
       const join = i.kind === 'meeting' && i.url && now < i.end
         ? `<button class="btn small" data-join="${idx}">Join</button>` : '';
-      const label = i.kind === 'meeting' ? 'Meeting' : typeName(i.type);
-      const moment = i.kind === 'block' && i.moment;
-      return `<li class="tl-item ${i.kind}${moment ? ' moment' : ''} ${status}">
+      const label = i.kind === 'meeting' ? 'Meeting' : i.event ? (i.series ? 'Repeated event' : 'Event') : typeName(i.type);
+      const event = i.kind === 'block' && i.event;
+      const mark = event
+        ? `<button class="tl-check" data-check="${idx}" aria-pressed="${!!i.done}" aria-label="${i.done ? `${esc(i.title)}: done` : `Check off ${esc(i.title)}`}"${i.skipped ? ' disabled' : ''}>${i.done ? STAR_ICON : ''}</button>`
+        : '<span class="tl-dot" aria-hidden="true"></span>';
+      const skip = i.kind === 'block'
+        ? `<label class="tl-skip" title="${i.skipped ? 'Skipped today: turn on to bring it back' : 'Turn off to skip it today'}"><input type="checkbox" class="switch small" data-skip="${idx}"${i.skipped ? '' : ' checked'} aria-label="${esc(i.title)} today"></label>` : '';
+      const when = i.skipped ? 'skipped today' : i.done ? 'done' : event ? `at ${fmt(i.start)}` : `until ${fmt(i.end)}`;
+      return `<li class="tl-item ${i.kind}${event ? ' moment' : ''}${i.done ? ' done' : ''}${i.skipped ? ' skipped' : ''} ${status}">
         <span class="tl-time">${fmt(i.start)}</span>
-        <span class="tl-dot" aria-hidden="true"></span>
+        ${mark}
         <div class="tl-body">
-          <span class="tl-what"><span class="tl-title">${esc(i.title)}${i.rings ? RING_ICON : ''}</span><span class="tl-sub">${esc(label)}</span></span>
-          <span class="tl-range">${moment ? `at ${fmt(i.start)}` : `until ${fmt(i.end)}`}</span>
-          ${join}
+          <span class="tl-what"><span class="tl-title">${esc(i.title)}${i.series ? REPEAT_ICON : ''}${i.rings ? RING_ICON : ''}</span><span class="tl-sub">${esc(label)}</span></span>
+          <span class="tl-range">${when}</span>
+          ${join}${skip}
         </div>
       </li>`;
     }).join('');
     list.querySelectorAll('[data-join]').forEach((btn) => {
       btn.addEventListener('click', () => dayflow.openUrl(items[Number(btn.dataset.join)].url));
+    });
+    list.querySelectorAll('[data-check]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const i = items[Number(btn.dataset.check)];
+        const r = await dayflow.setDone(i.id, !i.done);
+        if (!i.done) showCheer(r);
+        await loadToday();
+      });
+    });
+    list.querySelectorAll('[data-skip]').forEach((sw) => {
+      sw.addEventListener('change', async () => {
+        const i = items[Number(sw.dataset.skip)];
+        await dayflow.setSkipped(i.id, !sw.checked);
+        toast(sw.checked ? `${i.title} is back today` : `Skipped ${i.title} today. It's back tomorrow.`);
+        await loadToday();
+      });
     });
     $('agenda-empty').hidden = items.length > 0;
     $('calendar-hint').hidden = !!state.google.connected;
@@ -324,6 +359,39 @@ function renderAgenda() {
   currentShown = key;
   if (handOff) transition(draw); else draw();
 }
+
+// "★ 3 of 6 · 🔥 5" beside the date.
+function renderProgress() {
+  const { done, total, streak } = state.today.result;
+  const el = $('today-progress');
+  el.hidden = !total && !streak;
+  el.innerHTML = `${total ? `<span class="prog-done${done ? ' some' : ''}">${STAR_ICON}${done} of ${total}</span>` : ''}${streak ? `<span class="prog-streak">🔥 ${streak}</span>` : ''}`;
+  el.setAttribute('aria-label', `${done} of ${total} events done today${streak ? `, ${streak}-day streak` : ''}`);
+}
+
+// The cheer-up after checking an event off: "Nice! 3 of 6 done today", a ring filling to the
+// day's share, and the streak. It goes by itself.
+let cheerTimer;
+function showCheer({ done, total, streak }) {
+  const el = $('cheer');
+  const all = total > 0 && done >= total;
+  $('cheer-title').textContent = all ? `All ${total} done today! 🎉` : ['Nice!', 'Well done!', 'Great job!', 'Keep it up!'][done % 4];
+  $('cheer-sub').textContent = all ? 'Every event checked off' : `${done} of ${total} done today`;
+  $('cheer-streak').textContent = streak ? `${streak}-day streak 🔥` : '';
+  $('cheer-ring').style.setProperty('--share', String(total ? done / total : 1));
+  $('cheer-ring').style.setProperty('--from', String(total ? Math.max(0, done - 1) / total : 0));
+  el.hidden = false;
+  el.dataset.state = 'hidden';
+  requestAnimationFrame(() => { el.dataset.state = 'shown'; });
+  clearTimeout(cheerTimer);
+  cheerTimer = setTimeout(hideCheer, 2400);
+}
+function hideCheer() {
+  const el = $('cheer');
+  el.dataset.state = 'hidden';
+  setTimeout(() => { if (el.dataset.state === 'hidden') el.hidden = true; }, 300);
+}
+$('cheer').addEventListener('click', hideCheer);
 
 let lastMinute = -1;
 setInterval(() => {
@@ -351,12 +419,13 @@ function setSaveText(msg, err = false) {
 }
 const setSchedStatus = (msg, err = false) => toast(msg, err);
 
-// A block with no end is a moment: it happens at its start time. Moments never overlap anything.
+// A block with no end is an event: it happens at its start time and rings once. Events never
+// overlap anything.
 function rowProblems(b, i) {
-  if (!b.title.trim()) return 'Give this block a name.';
+  if (!b.title.trim()) return b.end ? 'Give this block a name.' : 'Give this event a name.';
   if (!b.start) return 'Set a start time.';
   if (b.end && toMin(b.end) <= toMin(b.start)) return 'End time must be after the start time.';
-  if (!b.days.length) return 'Pick at least one day, or this block never runs.';
+  if (!b.days.length) return b.end ? 'Pick at least one day, or this block never runs.' : 'Pick at least one day, or this event never rings.';
   if (!b.end) return '';
   const clash = state.draft.find((o, j) => j !== i && o.start && o.end &&
     o.days.some((d) => b.days.includes(d)) &&
@@ -366,58 +435,142 @@ function rowProblems(b, i) {
 }
 
 function durationText(b) {
-  if (b.start && !b.end) return 'Moment';
+  if (b.start && !b.end) return '';
   if (!b.start || !b.end || toMin(b.end) <= toMin(b.start)) return '';
   const d = toMin(b.end) - toMin(b.start);
   const h = Math.floor(d / 60);
   return h ? `${h} h${d % 60 ? ` ${d % 60} min` : ''}` : `${d} min`;
 }
 
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const fmtMin = (m) => fmt(atToday(hhmm(m)));
+const lengthText = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
+// "Every 30 min, 9:00 AM – 5:00 PM"
+const repeatText = (r) => `Every ${lengthText(r.every)}, ${fmtMin(toMin(r.first))} – ${fmtMin(toMin(r.last))}`;
+const repeatEvents = (id, list = state.draft) => list.filter((b) => b.series?.id === id);
+const defaultStart = () => (state.blockTypes.find((t) => t.id === DEFAULT_TYPE) || state.blockTypes[0]).reminders.start;
+const alertFrom = (r) => ({ on: true, sound: r.sound, ...(r.sounds ? { sounds: [...r.sounds] } : {}), fade: !!r.fade });
+
+// The block it was before you switched it to an event (and back), so switching restores it.
+const kindStash = new WeakMap();
+function switchKind(b, toEvent) {
+  if (toEvent === !b.end) return;
+  const stash = kindStash.get(b) || {};
+  if (toEvent) {
+    stash.block = { len: toMin(b.end) - toMin(b.start), type: b.type, reminders: b.reminders, ringOnSilent: b.ringOnSilent };
+    const r = b.type === OWN_TYPE && b.reminders ? b.reminders.start : (state.blockTypes.find((t) => t.id === b.type) || state.blockTypes[0]).reminders.start;
+    b.alert = stash.event?.alert || alertFrom(r);
+    b.end = '';
+    b.type = 'event';
+    delete b.reminders; delete b.ringOnSilent;
+  } else {
+    stash.event = { alert: b.alert };
+    const startMin = toMin(b.start);
+    b.end = hhmm(Math.min(startMin + (stash.block?.len || 30), 23 * 60 + 59));
+    if (toMin(b.end) <= startMin) { b.start = hhmm(Math.max(0, toMin(b.end) - 30)); }
+    b.type = stash.block?.type || DEFAULT_TYPE;
+    if (stash.block?.reminders) b.reminders = stash.block.reminders;
+    if (stash.block?.ringOnSilent) b.ringOnSilent = true;
+    delete b.alert; delete b.series;
+  }
+  kindStash.set(b, stash);
+}
+
+const groupKey = 'dayflow.groupRepeats';
+const grouped = () => { try { return localStorage.getItem(groupKey) === '1'; } catch { return false; } };
+
 // enter: the id of a block that was just added, so its row can expand into place.
+// An event's row has no end; one made by a repeat can only be changed through its repeat (Edit
+// repeat…) or by taking it out (Edit only this one). With Group repeats on, a repeat is one row.
 function renderEditor({ enter = null } = {}) {
   const list = $('block-list');
   list.innerHTML = '';
+  const hasRepeats = state.draft.some((b) => b.series);
+  $('group-repeats-row').hidden = !hasRepeats;
+  $('group-repeats').checked = grouped();
+  const seen = new Set();
   state.draft.forEach((b, i) => {
     const li = document.createElement('li');
-    li.className = `block-row${b.id === enter ? ' enter' : ''}`;
+    const event = !b.end;
+    const rep = b.series;
+    if (rep && grouped()) {
+      if (seen.has(rep.id)) return;
+      seen.add(rep.id);
+      const n = repeatEvents(rep.id).length;
+      li.className = 'block-row repeat-group';
+      li.dataset.index = i;
+      li.innerHTML = `
+        <span class="time-text">${fmtMin(toMin(rep.first))}</span>
+        <span class="time-text muted">${fmtMin(toMin(rep.last))}</span>
+        <div class="name-cell">
+          <span class="group-title">${BELL_ICON}${esc(b.title)}${REPEAT_ICON}</span>
+          <div class="meta"><span class="dur">${n} events · ${esc(repeatText(rep))}</span>
+            <button type="button" class="link-btn edit-repeat">Edit repeat…</button></div>
+        </div>
+        <span class="days-text muted">${esc(daysText(b.days))}</span>
+        <button class="remove" aria-label="Delete all ${n} ${esc(b.title)} events">×</button>
+        <span class="note"></span>`;
+      li.querySelector('.edit-repeat').addEventListener('click', () => openRepeat(b));
+      li.querySelector('.remove').addEventListener('click', () => askDeleteRepeat(b, { onlyAll: true }));
+      list.appendChild(li);
+      return;
+    }
+    li.className = `block-row${event ? ' event-row' : ''}${rep ? ' in-repeat' : ''}${b.id === enter ? ' enter' : ''}`;
+    li.dataset.index = i;
+    const lock = rep ? ' disabled' : '';
     li.innerHTML = `
-      <input type="time" aria-label="Start time" value="${esc(b.start)}" data-f="start">
-      <span class="end-cell"><input type="time" aria-label="End time (empty for a moment)" value="${esc(b.end)}" data-f="end">
-        <button type="button" class="clear-end" aria-label="No end: make it a moment" title="No end: make it a moment">×</button></span>
+      <input type="time" aria-label="${event ? 'Time' : 'Start time'}" value="${esc(b.start)}" data-f="start"${lock}>
+      <span class="end-cell">${event ? '<span class="no-end muted">—</span>' : `<input type="time" aria-label="End time" value="${esc(b.end)}" data-f="end">`}</span>
       <div class="name-cell">
-        <input type="text" aria-label="Block name" placeholder="What happens in this block?" value="${esc(b.title)}" data-f="title">
+        <input type="text" aria-label="${event ? 'Event name' : 'Block name'}" placeholder="${event ? 'What happens at this time?' : 'What happens in this block?'}" value="${esc(b.title)}" data-f="title"${lock}>
         <div class="meta">
-          <label class="type-pick"><span class="dot" aria-hidden="true"></span><select class="type-select" aria-label="Block type"></select></label>
+          <span class="kind-pick" role="group" aria-label="Kind">
+            <button type="button" data-kind="event" aria-pressed="${event}"${lock}>${BELL_ICON}Event</button><button type="button" data-kind="block" aria-pressed="${!event}"${lock}>Block</button>
+          </span>
+          ${event ? '' : '<label class="type-pick"><span class="dot" aria-hidden="true"></span><select class="type-select" aria-label="Block type"></select></label>'}
           <span class="dur"></span>
+          ${rep ? `<span class="dur">${REPEAT_ICON} ${esc(repeatText(rep))}</span><button type="button" class="link-btn edit-repeat">Edit repeat…</button><button type="button" class="link-btn only-this">Edit only this one</button>` : ''}
           <span class="ring-mark"></span>
-          <button type="button" class="rems-toggle" aria-expanded="false">Reminders ▸</button>
+          <button type="button" class="rems-toggle" aria-expanded="false">${event ? 'Alarm ▸' : 'Reminders ▸'}</button>
         </div>
       </div>
       <span class="days" role="group" aria-label="Repeats on">
-        ${DAY_LETTERS.map((l, d) => `<button class="day" aria-label="${DAY_NAMES[d]}" aria-pressed="${b.days.includes(d)}" data-day="${d}">${l}</button>`).join('')}
+        ${DAY_LETTERS.map((l, d) => `<button class="day" aria-label="${DAY_NAMES[d]}" aria-pressed="${b.days.includes(d)}" data-day="${d}"${lock}>${l}</button>`).join('')}
       </span>
-      <button class="remove" aria-label="Remove block">×</button>
+      <button class="remove" aria-label="Remove ${event ? 'event' : 'block'}">×</button>
       <span class="note"></span>
       <div class="block-rems" hidden></div>`;
 
     li.querySelectorAll('input[data-f]').forEach((inp) => {
       inp.addEventListener('input', () => {
-        const wasMoment = !b.end;
         b[inp.dataset.f] = inp.value;
         setDirty(true);
         refreshNotes();
-        if (inp.dataset.f === 'end' && wasMoment !== !b.end) renderBlockRems(li, b); // the reminder rows change
       });
     });
-    // × clears the end: the block becomes a moment.
-    li.querySelector('.clear-end').addEventListener('click', () => {
-      b.end = '';
-      li.querySelector('input[data-f="end"]').value = '';
-      setDirty(true);
-      refreshNotes();
-      renderBlockRems(li, b);
+    // Event or block. Switching back and forth keeps what each had.
+    li.querySelectorAll('[data-kind]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const toEvent = btn.dataset.kind === 'event';
+        if (toEvent === !b.end) return;
+        switchKind(b, toEvent);
+        setDirty(true);
+        renderEditor();
+        $('block-list').querySelector(`[data-index="${state.draft.indexOf(b)}"] [data-kind="${btn.dataset.kind}"]`)?.focus();
+      });
     });
-    // Reminders ▸ shows this block's reminders: its type's (read-only) or its own.
+    if (rep) {
+      li.querySelector('.edit-repeat').addEventListener('click', () => openRepeat(b));
+      // Takes it out of the repeat: it becomes an event of its own, with a new id.
+      li.querySelector('.only-this').addEventListener('click', () => {
+        b.id = newId();
+        delete b.series;
+        setDirty(true);
+        renderEditor();
+        toast(`${b.title} is now an event of its own. Save schedule to keep it.`);
+      });
+    }
+    // Reminders ▸ (Alarm ▸ for an event) shows its reminders: its type's (read-only) or its own.
     li.querySelector('.rems-toggle').addEventListener('click', () => {
       if (openRems.has(b.id)) openRems.delete(b.id); else openRems.add(b.id);
       renderBlockRems(li, b);
@@ -432,38 +585,41 @@ function renderEditor({ enter = null } = {}) {
       });
     });
     const typeSel = li.querySelector('.type-select');
-    fillTypeSelect(typeSel, b.type);
-    typeSel.addEventListener('change', () => {
-      if (typeSel.value === NEW_TYPE) {
-        fillTypeSelect(typeSel, b.type);
-        showView('settings');
-        showTab('types');
-        $('add-type').focus();
-        return;
-      }
-      if (typeSel.value === OWN_TYPE) {
-        // Own reminders start as a copy of the type's.
-        b.reminders = structuredClone(state.blockTypes.find((t) => t.id === b.type)?.reminders || state.blockTypes[0].reminders);
-        b.type = OWN_TYPE;
-        openRems.add(b.id);
-      } else if (b.type === OWN_TYPE) {
-        const name = typeName(typeSel.value);
-        if (!window.confirm(`Use ${name}'s reminders instead? This block's own reminder settings are removed.`)) {
+    if (typeSel) {
+      fillTypeSelect(typeSel, b.type);
+      typeSel.addEventListener('change', () => {
+        if (typeSel.value === NEW_TYPE) {
           fillTypeSelect(typeSel, b.type);
+          showView('settings');
+          showTab('types');
+          $('add-type').focus();
           return;
         }
-        b.type = typeSel.value;
-        delete b.reminders;
-      } else {
-        b.type = typeSel.value;
-      }
-      setDirty(true);
-      refreshNotes();
-      renderBlockRems(li, b);
-    });
+        if (typeSel.value === OWN_TYPE) {
+          // Own reminders start as a copy of the type's.
+          b.reminders = structuredClone(state.blockTypes.find((t) => t.id === b.type)?.reminders || state.blockTypes[0].reminders);
+          b.type = OWN_TYPE;
+          openRems.add(b.id);
+        } else if (b.type === OWN_TYPE) {
+          const name = typeName(typeSel.value);
+          if (!window.confirm(`Use ${name}'s reminders instead? This block's own reminder settings are removed.`)) {
+            fillTypeSelect(typeSel, b.type);
+            return;
+          }
+          b.type = typeSel.value;
+          delete b.reminders;
+        } else {
+          b.type = typeSel.value;
+        }
+        setDirty(true);
+        refreshNotes();
+        renderBlockRems(li, b);
+      });
+    }
     renderBlockRems(li, b);
-    // The row shrinks away before it's removed.
+    // The row shrinks away before it's removed. A repeat's event asks: all of them, or this one?
     li.querySelector('.remove').addEventListener('click', () => {
+      if (rep) { askDeleteRepeat(b); return; }
       const go = () => {
         state.draft.splice(state.draft.indexOf(b), 1);
         setDirty(true);
@@ -476,6 +632,34 @@ function renderEditor({ enter = null } = {}) {
     list.appendChild(li);
   });
   refreshNotes();
+}
+
+function daysText(days) {
+  const set = new Set(days);
+  if (set.size === 7) return 'Every day';
+  if (set.size === 5 && [1, 2, 3, 4, 5].every((d) => set.has(d))) return 'Weekdays';
+  if (set.size === 2 && set.has(0) && set.has(6)) return 'Weekends';
+  if (!set.size) return 'No days';
+  return [1, 2, 3, 4, 5, 6, 0].filter((d) => set.has(d)).map((d) => DAY_NAMES[d].slice(0, 3)).join(', ');
+}
+
+// Delete a repeat's event: all of them, or only this one?
+function askDeleteRepeat(b, { onlyAll = false } = {}) {
+  const n = repeatEvents(b.series.id).length;
+  $('del-title').textContent = `Delete ${b.title}`;
+  $('del-text').textContent = `It's one of ${n} events in a repeat (${repeatText(b.series)}).`;
+  $('del-all').textContent = `Delete all ${n} events`;
+  $('del-one').hidden = onlyAll;
+  const d = $('delete-dialog');
+  d.onclose = () => {
+    if (d.returnValue === 'all') state.draft = state.draft.filter((x) => x.series?.id !== b.series.id);
+    else if (d.returnValue === 'one') state.draft = state.draft.filter((x) => x !== b);
+    else return;
+    setDirty(true);
+    renderEditor();
+  };
+  d.returnValue = '';
+  d.showModal();
 }
 
 // Block types: each block's dropdown starts with Own reminders, then your types, then "New type…".
@@ -500,12 +684,31 @@ function renderBlockRems(li, b) {
   const toggle = li.querySelector('.rems-toggle');
   const open = openRems.has(b.id);
   toggle.setAttribute('aria-expanded', String(open));
-  toggle.textContent = open ? 'Reminders ▾' : 'Reminders ▸';
+  const word = b.end ? 'Reminders' : 'Alarm';
+  toggle.textContent = open ? `${word} ▾` : `${word} ▸`;
   li.querySelector('.ring-mark').innerHTML = b.ringOnSilent ? RING_ICON : '';
   box.hidden = !open;
   if (!open) return;
+  if (!b.end) {
+    // An event's one alarm. On iPhone it rings like an alarm; here, it's a reminder with a card.
+    const spec = [EVENT_ALERT];
+    box.innerHTML = `<p class="rems-note muted">${b.series ? 'Shared by every event of this repeat: change it with Edit repeat….' : 'It rings once, at its time. On iPhone it rings like an alarm, through silent mode and Focus, until you tap Stop or Done.'}</p>`
+      + reminderRowsHtml(spec, b.title || 'This event', { alwaysOn: true });
+    box.classList.toggle('read-only', !!b.series);
+    fillReminderRows(box, { alert: b.alert || alertFrom(defaultStart()) });
+    if (b.series) {
+      box.querySelectorAll('.rem-row select, .rem-fade, .rem-sounds').forEach((el) => { el.disabled = true; });
+      box.querySelector('.rem-play').addEventListener('click', () => playRow(box.querySelector('.rem-row'), EVENT_ALERT.sound));
+    } else {
+      wireReminderRows(box, spec, () => {
+        b.alert = { ...readReminderRows(box, spec).alert, on: true };
+        setDirty(true);
+      });
+    }
+    return;
+  }
   const own = b.type === OWN_TYPE;
-  const spec = b.end ? TYPE_REMINDERS : TYPE_REMINDERS.filter((r) => r.key === 'prep' || r.key === 'start');
+  const spec = TYPE_REMINDERS;
   const type = state.blockTypes.find((t) => t.id === b.type) || state.blockTypes[0];
   const reminders = own ? b.reminders : type.reminders;
   box.innerHTML = `<p class="rems-note muted">${own ? 'Set just for this block.' : `From the ${esc(type.name)} type. Change it in Settings → Block types, or choose Own reminders.`}</p>`
@@ -523,56 +726,181 @@ function renderBlockRems(li, b) {
   });
   if (own) {
     wireReminderRows(box, spec, () => {
-      b.reminders = { ...b.reminders, ...readReminderRows(box, spec) }; // a moment keeps its hidden Heads-up and Time's up
+      b.reminders = { ...b.reminders, ...readReminderRows(box, spec) };
       setDirty(true);
     });
   } else {
     // Read-only, but ▶ still plays.
-    box.querySelectorAll('.rem-row input, .rem-row select, .rem-fade, .step-down, .step-up').forEach((el) => { el.disabled = true; });
+    box.querySelectorAll('.rem-row input, .rem-row select, .rem-fade, .rem-sounds, .step-down, .step-up').forEach((el) => { el.disabled = true; });
     box.querySelectorAll('.rem-play').forEach((btn) => {
-      const row = btn.closest('.rem-row');
-      btn.addEventListener('click', () => play(row.querySelector('.rem-sound').value, null, $('set-volume').value,
-        { fade: row.querySelector('.rem-fade').getAttribute('aria-pressed') === 'true' }));
+      btn.addEventListener('click', () => playRow(btn.closest('.rem-row'), null));
     });
   }
 }
 // Keeps the dropdowns current when types change while the schedule has unsaved edits.
 function refreshEditorTypes() {
-  [...$('block-list').children].forEach((li, i) => {
-    const b = state.draft[i];
-    if (b && b.type !== OWN_TYPE && !state.blockTypes.some((t) => t.id === b.type)) b.type = DEFAULT_TYPE;
-    if (b) fillTypeSelect(li.querySelector('.type-select'), b.type);
+  [...$('block-list').children].forEach((li) => {
+    const b = state.draft[Number(li.dataset.index)];
+    const sel = li.querySelector('.type-select');
+    if (!b || !sel) return; // an event, or a grouped repeat
+    if (b.type !== OWN_TYPE && !state.blockTypes.some((t) => t.id === b.type)) b.type = DEFAULT_TYPE;
+    fillTypeSelect(sel, b.type);
   });
 }
-
-// Update each row's validation message in place, so typing never loses focus.
 function refreshNotes() {
-  [...$('block-list').children].forEach((li, i) => {
+  [...$('block-list').children].forEach((li) => {
+    if (li.classList.contains('repeat-group')) return;
+    const i = Number(li.dataset.index);
     const b = state.draft[i];
     const problem = rowProblems(b, i);
     const note = li.querySelector('.note');
     li.classList.toggle('invalid', !!problem && !problem.startsWith('Overlaps'));
     note.textContent = problem;
     li.querySelector('.dur').textContent = durationText(b);
-    li.querySelector('.remove').setAttribute('aria-label', `Remove ${b.title || 'block'}`);
+    li.querySelector('.remove').setAttribute('aria-label', `Remove ${b.title || (b.end ? 'block' : 'event')}`);
   });
 }
 
-$('add-block').addEventListener('click', () => {
-  // After a moment, the new block starts at the moment's time.
+// ＋ Add: an event, a repeated event or a block. A new one starts where your latest one ends,
+// with its days (and, for a block, its type).
+function addItem(kind) {
+  if (kind === 'repeat') { openRepeat(null); return; }
   const endOf = (x) => x.end || x.start || '00:00';
   const last = [...state.draft].sort((a, b) => toMin(endOf(a)) - toMin(endOf(b))).pop();
   const start = last ? endOf(last) : '09:00';
   const endMin = Math.min(toMin(start) + 30, 23 * 60 + 59);
-  const end = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+  const end = hhmm(endMin);
   const id = newId();
-  state.draft.push({ id, title: '', start, end, days: last ? [...last.days] : [1, 2, 3, 4, 5], type: last?.type || DEFAULT_TYPE,
-    ...(last?.type === OWN_TYPE && last.reminders ? { reminders: structuredClone(last.reminders) } : {}) });
+  const days = last ? [...last.days] : [1, 2, 3, 4, 5];
+  if (kind === 'event') {
+    state.draft.push({ id, title: '', start, end: '', days, type: 'event', alert: alertFrom(defaultStart()) });
+  } else {
+    const type = last && last.end ? last.type : DEFAULT_TYPE;
+    state.draft.push({ id, title: '', start, end, days, type,
+      ...(type === OWN_TYPE && last.reminders ? { reminders: structuredClone(last.reminders) } : {}) });
+  }
   setDirty(true);
   renderEditor({ enter: id });
   const row = $('block-list').lastElementChild;
   row.scrollIntoView({ block: 'nearest', behavior: reduceMotion.matches ? 'auto' : 'smooth' });
   row.querySelector('input[type="text"]').focus();
+}
+$('add-menu').querySelectorAll('[data-add]').forEach((btn) => {
+  btn.addEventListener('click', () => { $('add-menu').hidePopover(); addItem(btn.dataset.add); });
+});
+$('group-repeats').addEventListener('change', (e) => {
+  try { localStorage.setItem(groupKey, e.target.checked ? '1' : '0'); } catch {}
+  renderEditor();
+});
+
+// ---------------------------------------------------------------------------
+// Repeated events: First at, Last at, Every, days, name and sound. Create (or Save) shows what
+// it makes before making it; the events go into the schedule like any edit, saved with Save
+// schedule. Editing a repeat makes its events again: a time it still has keeps its id, so
+// today's checks and skips stay.
+// ---------------------------------------------------------------------------
+
+let repeating = null; // { rule, isNew }
+function openRepeat(event) {
+  const rule = event?.series ? { ...event.series } : { id: `r${newId().slice(1)}`, first: '09:00', last: '17:00', every: 30 };
+  repeating = { rule, isNew: !event };
+  $('rep-title').textContent = event ? 'Edit repeat' : 'New repeated event';
+  $('rep-name').value = event?.title || '';
+  $('rep-first').value = rule.first;
+  $('rep-last').value = rule.last;
+  $('rep-every').value = rule.every;
+  $('rep-days').querySelectorAll('.day').forEach((btn) => {
+    btn.setAttribute('aria-pressed', String((event?.days || [1, 2, 3, 4, 5]).includes(Number(btn.dataset.day))));
+  });
+  $('rep-rows').innerHTML = reminderRowsHtml([EVENT_ALERT], 'Each event', { alwaysOn: true });
+  fillReminderRows($('rep-rows'), { alert: event?.alert || alertFrom(defaultStart()) });
+  wireReminderRows($('rep-rows'), [EVENT_ALERT], () => {});
+  $('rep-delete').hidden = !event;
+  $('rep-delete').textContent = event ? `Delete all ${repeatEvents(rule.id).length} events` : '';
+  $('rep-form').hidden = false;
+  $('rep-confirm').hidden = true;
+  refreshRepeat();
+  $('repeat-dialog').showModal();
+  if (!event) $('rep-name').focus();
+}
+
+function repeatForm() {
+  const days = [...$('rep-days').querySelectorAll('.day')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => Number(b.dataset.day));
+  const rule = { ...repeating.rule, first: $('rep-first').value, last: $('rep-last').value, every: Number($('rep-every').value) };
+  return { title: $('rep-name').value.trim(), days, rule };
+}
+function repeatTimesOf(r) {
+  const out = [];
+  if (!TIME_RE_R.test(r.first) || !TIME_RE_R.test(r.last) || !(r.every > 0)) return out;
+  for (let m = toMin(r.first); m <= toMin(r.last) && out.length <= 200; m += r.every) out.push(m);
+  return out;
+}
+const TIME_RE_R = /^([01]\d|2[0-3]):([0-5]\d)$/;
+function repeatProblem({ title, days, rule }) {
+  if (!title) return 'Give this event a name.';
+  if (!TIME_RE_R.test(rule.first) || !TIME_RE_R.test(rule.last)) return 'Set the first and last times.';
+  if (toMin(rule.last) <= toMin(rule.first)) return 'The last time must be after the first.';
+  if (!Number.isInteger(rule.every) || rule.every < 1 || rule.every > 720) return 'Every must be from 1 to 720 minutes.';
+  if (!days.length) return 'Pick at least one day, or this event never rings.';
+  const n = repeatTimesOf(rule).length;
+  if (n < 2) return 'That makes only one event. Make the gap shorter, or the last time later.';
+  if (n > 200) return 'That would make more than 200 events. Make the gap longer.';
+  return '';
+}
+function refreshRepeat() {
+  const f = repeatForm();
+  const problem = repeatProblem(f);
+  const times = repeatTimesOf(f.rule);
+  $('rep-problem').textContent = problem;
+  $('rep-count').textContent = problem ? '' : `${times.length} events: ${fmtMin(times[0])}, ${fmtMin(times[1])}${times.length > 2 ? ` … ${fmtMin(times[times.length - 1])}` : ''}.`;
+  $('rep-save').disabled = !!problem;
+  $('rep-save').textContent = repeating.isNew ? 'Create' : 'Save';
+}
+['rep-name', 'rep-first', 'rep-last', 'rep-every'].forEach((id) => $(id).addEventListener('input', refreshRepeat));
+$('rep-days').querySelectorAll('.day').forEach((btn) => btn.addEventListener('click', () => {
+  btn.setAttribute('aria-pressed', String(btn.getAttribute('aria-pressed') !== 'true'));
+  refreshRepeat();
+}));
+$('rep-cancel').addEventListener('click', () => $('repeat-dialog').close());
+// Create / Save: first, what it makes.
+$('rep-save').addEventListener('click', () => {
+  const f = repeatForm();
+  if (repeatProblem(f)) return;
+  const times = repeatTimesOf(f.rule);
+  const before = repeatEvents(f.rule.id).length;
+  $('rep-confirm-title').textContent = `${repeating.isNew ? 'Create' : 'Make'} ${times.length} “${f.title}” events?`;
+  const lines = [`${daysText(f.days)}: ${fmtMin(times[0])}, ${fmtMin(times[1])}${times.length > 2 ? ` … ${fmtMin(times[times.length - 1])}` : ''}.`];
+  if (!repeating.isNew) lines.push(`The ${before} events it has now are replaced.`);
+  const perWeek = times.length * f.days.length;
+  if (perWeek > 48) lines.push(`On iPhone that's ${perWeek} alarms a week. DayFlow there sets the next 48 ahead and adds more each time it runs, so open DayFlow on your iPhone at least every couple of days.`);
+  $('rep-confirm-text').innerHTML = lines.map((l) => `<p>${esc(l)}</p>`).join('');
+  $('rep-confirm-go').textContent = repeating.isNew ? 'Create' : 'Save';
+  $('rep-form').hidden = true;
+  $('rep-confirm').hidden = false;
+  $('rep-confirm-go').focus();
+});
+$('rep-confirm-back').addEventListener('click', () => { $('rep-confirm').hidden = true; $('rep-form').hidden = false; });
+$('rep-confirm-go').addEventListener('click', () => {
+  const f = repeatForm();
+  const alert = { ...readReminderRows($('rep-rows'), [EVENT_ALERT]).alert, on: true };
+  const events = repeatTimesOf(f.rule).map((m) => ({
+    id: `${f.rule.id}-${hhmm(m).replace(':', '')}`, title: f.title, start: hhmm(m), end: '', days: [...f.days], type: 'event',
+    alert: structuredClone(alert), series: { ...f.rule },
+  }));
+  state.draft = [...state.draft.filter((b) => b.series?.id !== f.rule.id), ...events].sort((a, b) => toMin(a.start) - toMin(b.start));
+  $('repeat-dialog').close();
+  setDirty(true);
+  renderEditor();
+  setSaveText(`${events.length} ${f.title} events: Save schedule to keep them`);
+});
+$('rep-delete').addEventListener('click', () => {
+  const id = repeating.rule.id;
+  const n = repeatEvents(id).length;
+  if (!window.confirm(`Delete all ${n} events of this repeat?`)) return;
+  state.draft = state.draft.filter((b) => b.series?.id !== id);
+  $('repeat-dialog').close();
+  setDirty(true);
+  renderEditor();
 });
 
 $('discard').addEventListener('click', () => {
@@ -1215,42 +1543,71 @@ const MEETING_REMINDERS = [
   { key: 'before', label: 'Before it starts', lead: true, sound: 'airport-announcement-ding' },
   { key: 'start', label: 'Starting now', sound: 'elegant-door-announcement' },
 ];
+// An event's one reminder (EVENT_ALERT in main.js).
+const EVENT_ALERT = { key: 'alert', label: 'Alarm', sound: 'elevator-announcement-bells' };
 const clampLead = (v) => Math.min(60, Math.max(1, Math.round(Number(v)) || 5));
+const soundName = (id) => state.builtinSounds.find((x) => x.id === id)?.name
+  || state.customSounds.find((c) => `custom:${c.id}` === id)?.name || 'Unknown sound';
+const choicesOf = (r) => (Array.isArray(r?.sounds) && r.sounds.length ? r.sounds : [r.sound]);
+const soundsLabel = (list) => (list.length > 1 ? `${list.length} sounds, shuffled` : soundName(list[0]));
 
-function reminderRowsHtml(spec, owner) {
+// many: the reminder can have several sounds (all but meetings); its sound control opens a
+// popover of checkboxes instead of a menu. alwaysOn: an event's alarm, with no switch.
+function reminderRowsHtml(spec, owner, { alwaysOn = false, many = spec !== MEETING_REMINDERS } = {}) {
   const options = soundOptions();
   return spec.map(({ key, label, lead }) => `
     <div class="rem-row" data-key="${key}">
-      <label class="rem-label"><input type="checkbox" class="switch rem-on" aria-label="${esc(owner)}: ${label}"> <span>${label}</span></label>
+      <label class="rem-label">${alwaysOn ? '' : `<input type="checkbox" class="switch rem-on" aria-label="${esc(owner)}: ${label}">`} <span>${label}</span></label>
       <span class="rem-lead">${lead ? `<span class="stepper">
           <button type="button" class="step-down" aria-label="One minute earlier">−</button>
           <input type="number" class="rem-min" min="1" max="60" aria-label="${esc(owner)}: minutes before">
           <button type="button" class="step-up" aria-label="One minute later">+</button>
         </span> min before` : ''}</span>
-      <span class="slot"><select class="rem-sound" aria-label="${esc(owner)}: ${label} sound">${options}</select>
+      <span class="slot">${many
+        ? `<button type="button" class="btn small rem-sounds" aria-haspopup="dialog" aria-label="${esc(owner)}: ${label} sounds"></button>`
+        : `<select class="rem-sound" aria-label="${esc(owner)}: ${label} sound">${options}</select>`}
         <button type="button" class="btn small fade-toggle rem-fade" aria-pressed="false" title="Start quiet and grow to your volume">Fade in</button>
         <button type="button" class="btn small icon rem-play" aria-label="Play the ${esc(owner)} ${label.toLowerCase()} sound">▶</button></span>
     </div>`).join('');
 }
 
+// A row's sounds: from its menu, or (with several) kept on the row.
+const rowSounds = (row) => (row.querySelector('.rem-sounds') ? JSON.parse(row.dataset.sounds || '[]') : [row.querySelector('.rem-sound').value]);
+function setRowSounds(row, list) {
+  row.dataset.sounds = JSON.stringify(list);
+  const btn = row.querySelector('.rem-sounds');
+  if (btn) { btn.textContent = `${soundsLabel(list)} ▾`; btn.title = list.map(soundName).join(', '); }
+}
+// ▶ plays one of its sounds (a random one, with several).
+function playRow(row, fallback) {
+  const list = rowSounds(row);
+  play(list[Math.floor(Math.random() * list.length)], fallback, $('set-volume').value,
+    { fade: row.querySelector('.rem-fade').getAttribute('aria-pressed') === 'true' });
+}
+
 function fillReminderRows(box, reminders) {
   box.querySelectorAll('.rem-row').forEach((row) => {
     const r = reminders[row.dataset.key];
-    row.querySelector('.rem-on').checked = r.on;
+    const on = row.querySelector('.rem-on');
+    if (on) on.checked = r.on;
     row.querySelector('.rem-fade').setAttribute('aria-pressed', String(!!r.fade));
-    row.querySelector('.rem-sound').value = r.sound;
+    if (row.querySelector('.rem-sounds')) setRowSounds(row, choicesOf(r));
+    else row.querySelector('.rem-sound').value = r.sound;
     const min = row.querySelector('.rem-min');
     if (min && document.activeElement !== min) min.value = r.lead;
-    row.classList.toggle('off', !r.on);
+    row.classList.toggle('off', !!on && !r.on);
   });
 }
 
 function readReminderRows(box, spec) {
   return Object.fromEntries(spec.map(({ key, lead }) => {
     const row = box.querySelector(`.rem-row[data-key="${key}"]`);
+    const list = rowSounds(row);
+    const on = row.querySelector('.rem-on');
     const r = {
-      on: row.querySelector('.rem-on').checked,
-      sound: row.querySelector('.rem-sound').value,
+      on: on ? on.checked : true,
+      sound: list[0],
+      ...(list.length > 1 ? { sounds: list } : {}),
       fade: row.querySelector('.rem-fade').getAttribute('aria-pressed') === 'true',
     };
     if (lead) r.lead = clampLead(row.querySelector('.rem-min').value);
@@ -1262,15 +1619,19 @@ function readReminderRows(box, spec) {
 function wireReminderRows(box, spec, onChange) {
   box.querySelectorAll('.rem-row').forEach((row) => {
     const s = spec.find((x) => x.key === row.dataset.key);
-    row.querySelector('.rem-on').addEventListener('change', (e) => {
+    row.querySelector('.rem-on')?.addEventListener('change', (e) => {
       row.classList.toggle('off', !e.currentTarget.checked);
       onChange(0);
     });
-    row.querySelector('.rem-sound').addEventListener('change', (e) => {
+    row.querySelector('.rem-sound')?.addEventListener('change', (e) => {
       onChange(0);
       const fade = row.querySelector('.rem-fade').getAttribute('aria-pressed') === 'true';
       play(e.currentTarget.value, s.sound, $('set-volume').value, { fade });
     });
+    const many = row.querySelector('.rem-sounds');
+    many?.addEventListener('click', () => openSoundPop(many, rowSounds(row), s.sound,
+      () => row.querySelector('.rem-fade').getAttribute('aria-pressed') === 'true',
+      (list) => { setRowSounds(row, list); onChange(0); }));
     const min = row.querySelector('.rem-min');
     if (min) {
       min.addEventListener('input', () => onChange(700));
@@ -1287,10 +1648,39 @@ function wireReminderRows(box, spec, onChange) {
       fade.setAttribute('aria-pressed', String(fade.getAttribute('aria-pressed') !== 'true'));
       onChange(0);
     });
-    row.querySelector('.rem-play').addEventListener('click', () => {
-      play(row.querySelector('.rem-sound').value, s.sound, $('set-volume').value, { fade: fade.getAttribute('aria-pressed') === 'true' });
-    });
+    row.querySelector('.rem-play').addEventListener('click', () => playRow(row, s.sound));
   });
+}
+
+// The sound popover: every sound with a checkbox and ▶. Check several to shuffle them: each time
+// the reminder rings, one plays at random, never the one it played last. One stays checked.
+function openSoundPop(anchor, current, fallback, fade, onChange) {
+  const pop = $('sound-pop');
+  let list = [...current];
+  const item = (id, name) => `<li><label><input type="checkbox" value="${esc(id)}"${list.includes(id) ? ' checked' : ''}> ${esc(name)}</label>
+    <button type="button" class="btn small icon" data-play="${esc(id)}" aria-label="Play ${esc(name)}">▶</button></li>`;
+  const mine = state.customSounds.map((c) => item(`custom:${c.id}`, c.name)).join('');
+  pop.innerHTML = `<p class="pop-head">Check several to shuffle them</p>
+    <p class="pop-sub muted">Each time, one plays at random, never the same twice in a row.</p>
+    <p class="pop-group">Built-in</p><ul>${state.builtinSounds.map((x) => item(x.id, x.name)).join('')}</ul>
+    ${mine ? `<p class="pop-group">Your clips</p><ul>${mine}</ul>` : ''}`;
+  const sync = () => {
+    pop.querySelectorAll('input').forEach((c) => { c.disabled = c.checked && list.length === 1; });
+  };
+  pop.querySelectorAll('input').forEach((c) => c.addEventListener('change', () => {
+    list = c.checked ? [...list, c.value] : list.filter((x) => x !== c.value);
+    if (!list.length) { list = [c.value]; c.checked = true; }
+    sync();
+    onChange(list);
+    if (c.checked) play(c.value, fallback, $('set-volume').value, { fade: fade() });
+  }));
+  pop.querySelectorAll('[data-play]').forEach((b) => b.addEventListener('click', () => play(b.dataset.play, fallback, $('set-volume').value, { fade: fade() })));
+  sync();
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.min(r.left, window.innerWidth - 300)}px`;
+  pop.style.top = `${Math.min(r.bottom + 6, window.innerHeight - 380)}px`;
+  pop.showPopover();
+  pop.querySelector('input:checked')?.focus();
 }
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ function button(label, action, kind = '') {
 
   const actions = $('actions');
   if (d.snooze.length) actions.append(button('Snooze ▾', 'snooze', 'ghost'));
+  if (d.done) { actions.append(button('Got it', 'dismiss'), button('✓ Done', 'done', 'primary')); return; }
   if (d.join === 'join') actions.append(button('Got it', 'dismiss'), button('Join', 'join', 'primary'));
   else if (d.join === 'calendar') actions.append(button('Open in Calendar', 'calendar'), button('Got it', 'dismiss', 'primary'));
   else actions.append(button('Got it', 'dismiss', 'primary'));
@@ -43,3 +44,14 @@ function showMore(n) {
 }
 dayflow.onCardMore(showMore);
 dayflow.onCardLeave(() => $('card').classList.add('leave'));
+
+// Done: the card turns into the cheer-up for a moment, then goes.
+dayflow.onCardCheer(({ done, total, streak }) => {
+  const card = $('card');
+  card.classList.add('cheer');
+  $('label').textContent = 'Done';
+  $('title').textContent = total && done >= total ? `All ${total} done today! 🎉` : ['Nice!', 'Well done!', 'Great job!', 'Keep it up!'][done % 4];
+  $('sub').textContent = `${total && done < total ? `${done} of ${total} done today` : 'Every event checked off'}${streak ? ` · ${streak}-day streak 🔥` : ''}`;
+  $('actions').innerHTML = '';
+  $('more').hidden = true;
+});

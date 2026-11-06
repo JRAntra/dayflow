@@ -6,7 +6,7 @@ import SwiftUI
 import AlarmKit
 #endif
 
-/// Rings the reminders of blocks set to "Ring even on silent" as alarms (AlarmKit, iOS 26 and
+/// Rings events, and the reminders of blocks set to "Ring even on silent", as alarms (AlarmKit, iOS 26 and
 /// later). Unlike notifications, alarms ring through the silent switch and Focus, show on the
 /// Lock Screen and in the Dynamic Island, and keep going until you tap Stop.
 ///
@@ -57,7 +57,7 @@ enum AlarmScheduler {
 
     /// The same id every time for the same reminder, saying the same thing at the same time.
     static func alarmId(_ ev: PlannedReminder, sound: String?) -> UUID {
-        let key = "\(ev.id)|\(ev.at.timeIntervalSinceReferenceDate)|\(ev.title)|\(sound ?? "-")"
+        let key = "\(ev.id)|\(ev.at.timeIntervalSinceReferenceDate)|\(ev.title)|\(sound ?? "-")|\(ev.canCheck ? "done" : "")"
         var bytes = Array(SHA256.hash(data: Data(key.utf8)).prefix(16))
         bytes[6] = (bytes[6] & 0x0F) | 0x50 // a name-based UUID
         bytes[8] = (bytes[8] & 0x3F) | 0x80
@@ -105,7 +105,7 @@ enum AlarmScheduler {
         var failed: [PlannedReminder] = []
         for (id, (ev, sound)) in wanted.sorted(by: { $0.value.0.at < $1.value.0.at }) where !have.contains(id) {
             do {
-                _ = try await manager.schedule(id: id, configuration: configuration(ev, sound: sound))
+                _ = try await manager.schedule(id: id, configuration: configuration(ev, id: id, sound: sound))
             } catch {
                 failed.append(ev)
             }
@@ -113,18 +113,23 @@ enum AlarmScheduler {
         return failed
     }
 
+    /// An event's alarm has Done beside Stop: it stops the alarm and checks the event off,
+    /// without opening DayFlow.
     @available(iOS 26.0, *)
-    private static func configuration(_ ev: PlannedReminder, sound: String?) -> AlarmManager.AlarmConfiguration<Info> {
+    private static func configuration(_ ev: PlannedReminder, id: UUID, sound: String?) -> AlarmManager.AlarmConfiguration<Info> {
         let title = LocalizedStringResource(stringLiteral: ev.title)
+        let done = ev.canCheck ? AlarmButton(text: "Done", textColor: .white, systemImageName: "checkmark") : nil
         let alert: AlarmPresentation.Alert
         if #available(iOS 26.1, *) {
-            alert = AlarmPresentation.Alert(title: title)
+            alert = AlarmPresentation.Alert(title: title, secondaryButton: done, secondaryButtonBehavior: done == nil ? nil : .custom)
         } else {
-            alert = AlarmPresentation.Alert(title: title, stopButton: AlarmButton(text: "Stop", textColor: .white, systemImageName: "stop.fill"))
+            alert = AlarmPresentation.Alert(title: title, stopButton: AlarmButton(text: "Stop", textColor: .white, systemImageName: "stop.fill"),
+                                            secondaryButton: done, secondaryButtonBehavior: done == nil ? nil : .custom)
         }
         let attributes = AlarmAttributes<Info>(presentation: AlarmPresentation(alert: alert),
                                                metadata: Info(blockId: ev.blockId), tintColor: Palette.accent)
-        return .alarm(schedule: .fixed(ev.at), attributes: attributes,
+        let intent = ev.canCheck ? CheckOffIntent(eventId: ev.blockId ?? "", day: ev.day, alarmId: id.uuidString) : nil
+        return .alarm(schedule: .fixed(ev.at), attributes: attributes, secondaryIntent: intent,
                       sound: sound.map { .named($0) } ?? .default)
     }
     #endif

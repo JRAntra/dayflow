@@ -1,6 +1,6 @@
 # DayFlow User Guide
 
-DayFlow runs your day in blocks. You set up the phases of your day once (deep work, lunch, admin, a walk), and DayFlow reminds you to get ready for each one, tells you when it starts, warns you before it ends, and lets you know when time's up. It can also remind you about meetings from Google Calendar.
+DayFlow runs your day in blocks and events. You set up your week once: **blocks** for the phases of your day (deep work, lunch, admin, a walk), and **events** for things that happen at one moment (take medicine, drink water every 30 minutes). DayFlow reminds you to get ready for each block, tells you when it starts, warns you before it ends, and lets you know when time's up; an event rings once, at its time, and you check it off when it's done. It can also remind you about meetings from Google Calendar.
 
 Everything stays on your Mac. The only time DayFlow goes online is to talk to Google, and only if you connect your calendar.
 
@@ -11,7 +11,7 @@ There's also a beta of **DayFlow for iPhone**. Sections 1 to 16 describe the Mac
 1. [Install DayFlow](#1-install-dayflow)
 2. [A quick tour](#2-a-quick-tour)
 3. [Today](#3-today)
-4. [Schedule: planning your blocks](#4-schedule-planning-your-blocks)
+4. [Schedule: planning your events and blocks](#4-schedule-planning-your-events-and-blocks)
 5. [Block types and their reminders](#5-block-types-and-their-reminders)
 6. [How reminders work](#6-how-reminders-work)
 7. [Reminder cards](#7-reminder-cards)
@@ -63,7 +63,7 @@ DayFlow opens with a sample weekday schedule so you can see how it works:
 | 3:15 – 5:00 | Admin and follow-ups |
 | 5:00 – 5:15 | Shut down for the day |
 
-Change or delete any of it in [Schedule](#4-schedule-planning-your-blocks).
+Change or delete any of it in [Schedule](#4-schedule-planning-your-events-and-blocks).
 
 DayFlow keeps running after you close its window. A small **sun-over-water icon** appears in the menu bar, with the minutes left in the current block next to it. To quit, choose **Quit DayFlow** at the bottom of the sidebar, press **⌘Q**, or click the menu bar icon and choose **Quit DayFlow**. To silence it without quitting, see [Turning reminders off](#turning-reminders-off).
 
@@ -86,9 +86,10 @@ DayFlow follows your Mac's light or dark appearance. If you've turned on **Reduc
 
 ### The dial
 
-The dial shows today's blocks in a ring around it, from your first block to your last.
+The dial shows today's blocks and events in a ring around it, from the first to the last.
 
 - **Teal arcs** are your blocks. Finished blocks fade, and the current one is thicker with a soft glow.
+- **Dots** on the ring are events, gold once you've checked them off.
 - **Amber arcs** around the outside are meetings from Google Calendar.
 - **The hand** points to now and moves smoothly through the day.
 
@@ -103,29 +104,61 @@ Between blocks the middle says **Free time** and counts down to the next block. 
 
 ### Today's flow
 
-On the right is a timeline of today's blocks and meetings in order. Each row shows the start time, the name, the block type (or *Meeting*), and when it ends. Finished items fade, and the current block sits on a raised card. When one block hands over to the next, the highlight slides down to the new one.
+On the right is a timeline of today's events, blocks and meetings in order. Each row shows the start time, the name, the block type (or *Event*, *Repeated event* or *Meeting*), and when it ends. Finished items fade, and the current block sits on a raised card. When one block hands over to the next, the highlight slides down to the new one.
 
 Meetings with a video link have a **Join** button until they end.
 
+### Checking off events
+
+Each event in Today's flow has a round **check** on its left. Click it when you've done it, at any time that day, even before it rings:
+
+- The row turns **gold** with a star, and says *done*. Its dot on the dial turns gold too.
+- A **cheer-up** pops up for a moment at the top: *Nice! 3 of 6 done today*, with a ring filling up and your streak. It goes by itself, or click it.
+- If its time hasn't come yet, it won't ring today. Click the check again to uncheck it, and it rings after all.
+- An event's [reminder card](#7-reminder-cards) has **✓ Done**, which checks it off from the card.
+
+Next to the date, **★ 3 of 6** counts today's events done so far, and **🔥 5** is your streak.
+
+Only events can be checked off. Blocks are time you spend, not tasks.
+
+### Your streak
+
+Your **streak** is how many days in a row you've checked off at least **80%** of that day's events. For example, 4 of 5 counts, and 3 of 4 (75%) doesn't.
+
+- Today joins the streak once it reaches 80%. Until then, the streak counts up to yesterday.
+- Events you [skipped](#skipping-for-today) don't count towards the day.
+- A day with no events, a weekend with nothing planned say, is passed over: it doesn't break the streak.
+- Checks and the streak stay on this Mac. They aren't in export files, and the iPhone keeps its own.
+
+### Skipping for today
+
+Every event and block in Today's flow has a **switch** on the right. Turn it off to **skip it today**: it's struck through and greyed out, and its reminders don't ring today. A skipped block also leaves the dial and the countdown. Turn the switch back on to bring it back.
+
+Skipping lasts only for that day: everything is back the next morning. One event of a [repeat](#repeated-events) skips just that one time.
+
 ---
 
-## 4. Schedule: planning your blocks
+## 4. Schedule: planning your events and blocks
 
-**Schedule** is your weekly plan. Each row is one block:
+**Schedule** is your weekly plan. Each row is an **event** or a **block**:
+
+- An **event** happens at one time and rings once, for example *Take medicine · 9:00 PM*.
+- A **block** lasts from a start time to an end time and has four reminders, for example *Deep work · 9:20 – 11:30 AM*.
 
 | Part | What it does |
 |---|---|
-| **Starts / Ends** | The block's start and end times. Leave **Ends** empty (or click its **×**) for a [moment](#moments). |
-| **Name** | What happens in the block. |
-| **Type** | The small menu under the name. The type decides the block's reminders (see [Block types](#5-block-types-and-their-reminders)), or choose **Own reminders** to set them for this block alone (see [A block's own reminders](#a-blocks-own-reminders)). **New type…** at the bottom of the menu takes you to Settings → Block types. |
-| **Length** | Worked out for you, for example *2 h 10 min*, or *Moment*. |
-| **Reminders ▸** | Shows the block's reminders under the row. |
+| **Starts / Ends** | The start and end times. An event has only a time; its Ends shows **—**. |
+| **Name** | What happens. |
+| **Event · Block** | Switches between the two. A block that becomes an event drops its end and its reminders, and rings with its Start sound; switching back restores what it had. |
+| **Type** | A block's type, in the small menu under the name. The type decides the block's reminders (see [Block types](#5-block-types-and-their-reminders)), or choose **Own reminders** to set them for this block alone (see [A block's own reminders](#a-blocks-own-reminders)). **New type…** at the bottom of the menu takes you to Settings → Block types. Events have no type. |
+| **Length** | Worked out for you, for example *2 h 10 min*. |
+| **Reminders ▸** / **Alarm ▸** | Shows the block's reminders, or the event's alarm, under the row. |
 | **Repeats on** | The days of the week, S M T W T F S. Click a day to turn it on or off. |
-| **×** | Removes the block. |
+| **×** | Removes it. |
 
-### Adding blocks
+### Adding events and blocks
 
-Click **＋ Add block**. The new block starts where your latest block ends, lasts 30 minutes, and copies that block's days and type. Then type its name and adjust the times.
+Click **＋ Add…** and choose **Event**, **Repeated event…** or **Block**. A new event or block starts where your latest one ends and copies its days (a new block lasts 30 minutes and takes its type too). Then type its name and adjust the times. A repeated event opens its own window: see [Repeated events](#repeated-events).
 
 ### Saving
 
@@ -134,16 +167,34 @@ As soon as you change anything, a bar appears at the bottom: **Unsaved changes �
 - **Save schedule** saves your changes and updates reminders straight away.
 - **Discard** puts the schedule back to how it was last saved.
 
-DayFlow checks each block before saving. A block needs a name, an end time after its start time (or no end, for a moment), and at least one day. A block with a problem gets a red outline and a message under it. Overlapping blocks are allowed, but the row tells you which block it overlaps.
+DayFlow checks each row before saving. It needs a name, at least one day, and, for a block, an end time after its start time. A row with a problem gets a red outline and a message under it. Overlapping blocks are allowed, but the row tells you which block it overlaps.
 
-### Moments
+### Events
 
-A **moment** is a block with only a start time, for something that happens at one moment rather than lasting, such as *Take medicine · 1:00 PM*. Leave its **Ends** field empty, or click the **×** in it.
+An **event** is for something that happens at one moment rather than lasting, such as *Take medicine · 9:00 PM*. It rings **once**, at its time: *Now: Take medicine · It's 9:00 PM*, or *…during Lunch* when a block is running. There's no heads-up before it.
 
-- A moment gets two reminders: **Start preparation** (*In 5 min: Take medicine · Get ready. It's at 1:00 PM.*) and **Start** (*Now: Take medicine · It's 1:00 PM.*, or *…during Lunch.* when a block is running). Heads-up and Time's up don't apply.
-- On Today, a moment is a **dot** on the dial and a **diamond** in Today's flow, marked *at 1:00 PM*. It's never "the current block", though it can be what's next.
-- A moment never counts as overlapping a block, and its reminders are never merged with a block's: at 1:00 PM you get the moment's reminder and the block's, each with its own sound.
-- To give a moment an end again, type an end time.
+- **Alarm ▸** shows its one reminder: its sound (or [several](#several-sounds-for-one-reminder)), **Fade in** and ▶. New events start with your Default type's Start sound.
+- On your iPhone, every event rings as an **alarm**, through silent mode and Focus (see [Ringing even on silent](#ringing-even-on-silent)). On the Mac it's a reminder with a card, like any other.
+- On Today, an event is a **dot** on the dial and has a [check](#checking-off-events) in Today's flow. It's never "the current block", though it can be what's next.
+- An event never counts as overlapping a block, and its reminder is never merged with a block's: at 1:00 PM you get the event's and the block's, each with its own sound.
+- **Moments** from earlier versions (blocks with only a start time) became events. Each kept its Start reminder's sound and fade (or Start preparation's, if only that was on).
+
+### Repeated events
+
+A **repeated event** makes several events at once: *Drink water* every 30 minutes from 9:00 AM to 5:00 PM is 17 events. Choose **＋ Add… → Repeated event…** and fill in:
+
+- **Name**, **First at**, **Last at** and **Every** (minutes, 1 to 720). *Last at* is included when the gap lands on it exactly: every 45 minutes from 9:00 to 5:00 ends at 4:30.
+- **Repeats on**, and the **Alarm** sound(s) and Fade in that every event shares.
+
+It shows how many events it makes as you type. **Create** then asks first, *Create 17 "Drink water" events?*, with their times, so you can catch a typo. If they'd need more alarms a week than your iPhone sets ahead (48), it says so: open DayFlow on your iPhone at least every couple of days. A repeat can make at most 200 events.
+
+The events go into the schedule like any change; **Save schedule** keeps them. Each one is an event of its own in Today (you check off or skip each time on its own), but they stay tied to their repeat:
+
+- Their rows show **↻** and the rule, *Every 30 min, 9:00 AM – 5:00 PM*, and their time, name and days can't be changed one by one.
+- **Edit repeat…** changes all of them. Saving makes the events again from the new rule (with the same check first): change *Every* from 30 to 45, and the 17 events become 11. Today's checks and skips stay on the times it still has.
+- **Edit only this one** takes the event out of its repeat. It becomes an event of its own that you can change, and later changes to the repeat leave it alone.
+- **×** asks: **Delete all 17 events**, or **Delete only this one**.
+- **Group repeats**, above the list, shows each repeat as one row: *Drink water · 17 events · Every 30 min, 9:00 AM – 5:00 PM*.
 
 ### A block's own reminders
 
@@ -277,11 +328,13 @@ Alongside each notification, DayFlow shows a **card** at the top right of your s
 |---|---|
 | Start preparation, Heads-up | **Snooze ▾** and **Got it** |
 | Start, Time's up | **Got it** |
+| An event | **Got it** and **✓ Done** |
 | Meeting, before it starts | **Snooze ▾**, **Got it**, and **Join** (or **Open in Calendar** if there's no video link) |
 | Meeting, starting now | **Got it**, and **Join** (or **Open in Calendar**) |
 
 - **Snooze ▾** offers 1, 5 or 10 minutes. It only lists times that still come before the moment the reminder is about, so you can't snooze past the start of the block. A snoozed card comes back with an updated title, for example *In 2 min: Coffee break*.
 - **Got it** closes the card.
+- **✓ Done** checks the event off: the card shows the cheer-up for a moment (*Great job! 2 of 6 done today*), then goes.
 - **Join** opens the meeting's video link. **Open in Calendar** opens the event in Google Calendar.
 - **Clicking the card's text** opens DayFlow's window.
 
@@ -309,7 +362,15 @@ Every reminder can use any of DayFlow's 18 built-in sounds, each 4 to 9 seconds 
 
 > Soft bell · Echo bells · Fairy bell · Magic bell · Mystery bells · Magic glitter · Fantasy bells · Flute · Elevator bells · Elegant chime · Airport ding · Classic door bell · Doorbell tone · Hour bells · Class bell · Sleigh bells · Classic alarm · Rooster crowing
 
-Pick sounds per reminder in [Block types](#5-block-types-and-their-reminders) and [Meetings](#9-meetings-from-google-calendar).
+Pick sounds per reminder in [Block types](#5-block-types-and-their-reminders), in a block's own reminders, in an event's Alarm ▸, and in [Meetings](#9-meetings-from-google-calendar).
+
+### Several sounds for one reminder
+
+A reminder can have **more than one sound**, so a *Drink water* every 30 minutes doesn't get stale. Click its sound button (*Elevator bells ▾*) to open the list of sounds and check the ones you want. Clicking a checkbox plays that sound; ▶ beside each plays it too. One stays checked.
+
+With several checked, the button says *3 sounds, shuffled*, and each time the reminder rings, **one is picked at random, never the one it played last**. ▶ on the reminder row plays a random one of them. Volume and Fade in apply to all of them.
+
+This works for events (repeated ones included) and blocks' reminders, in types and in Own reminders. Meeting reminders keep one sound each. If you remove one of your clips, it drops out of any reminder that had other sounds too; a reminder left with none goes back to its starting sound.
 
 ### Settings → Sounds
 
@@ -451,12 +512,12 @@ The sun-over-water icon in the menu bar shows the minutes left in the current bl
 
 **Schedule → Export…** saves a `.json` file containing:
 
-- your blocks and moments, with any block's own reminders and whether it rings even on silent;
+- your events and blocks, with each event's alarm and repeat, any block's own reminders, whether it rings even on silent, and every sound of reminders with several;
 - the block types they use, with all four reminders each;
 - your Meetings reminders and volume;
 - any of your own sound clips those reminders use (built into the file, so it works on another Mac).
 
-It **never** includes your Google sign-in. Files from this version (version 4, with moments, own reminders and Ring on silent) need an up-to-date DayFlow to import; an older version says *"That file was made by a newer version of DayFlow."* Older files still import. Use exports to back up your plan, move it to another Mac, or share a schedule with someone.
+It **never** includes your Google sign-in, or what you've checked off and skipped. Files from this version (version 5, with events, repeats and several sounds per reminder) need an up-to-date DayFlow to import; an older version says *"That file was made by a newer version of DayFlow."* Older files still import. Use exports to back up your plan, move it to another Mac, or share a schedule with someone.
 
 ### Import
 
@@ -546,6 +607,11 @@ Only one copy of DayFlow runs at a time; opening it again brings the running cop
 |---|---|
 | See what's on now | **Today**, the Mini timer, or the menu bar icon |
 | Plan your week | **Schedule**, then **Save schedule** |
+| Add something that rings once | **Schedule → ＋ Add… → Event** |
+| Add an event every 30 minutes | **Schedule → ＋ Add… → Repeated event…** |
+| Check an event off | Its check in **Today's flow**, or **✓ Done** on its card |
+| Skip something today | Its switch in **Today's flow** |
+| Shuffle several sounds | A reminder's sound button, then check several |
 | Change a block's reminders | Change its **type** in Schedule, or edit the type in **Settings → Block types** |
 | Hear a sound | Pick it in a sound menu, or click **▶** |
 | Add your own sound | **Settings → Sounds → Add a Clip ▾** (record, choose a file), drag files onto Your clips, or put them in **Music → DayFlow Clips** |
@@ -590,30 +656,45 @@ Three tabs at the bottom:
 
 | Tab | What's there |
 |---|---|
-| **Today** | The dial, the current block with its countdown, **Turn off reminders…**, and today's flow, with meetings and their **Join** buttons |
-| **Schedule** | Your weekly plan as a **List** or one **Day** at a time. **＋** adds a block; **⋯** has **Import…**, **Export…** and **Backups** |
+| **Today** | The dial, the current block with its countdown, **Turn off reminders…**, today's done count and streak, and today's flow, with checks for events and meetings' **Join** buttons |
+| **Schedule** | Your weekly plan as a **List** or one **Day** at a time. **＋** adds an event, a repeated event or a block; **⋯** has **Import…**, **Export…** and **Backups** |
 | **Settings** | **Block types**, **Meetings**, **Sounds**, **Calendars** and **General** |
 
 ### Planning your blocks
 
-**List** shows every block, earliest first, with its type, days and length. The day strip (**All · M T W T F S S**) shows one day's blocks.
+**List** shows every event and block, earliest first: events with a bell 🔔, blocks with a bar, with each one's type, days and length. The day strip (**All · M T W T F S S**) shows one day's.
 
-- **Tap a block** to edit it: name, type, start and end times, the days it repeats on, and its **Reminders**. **Save** applies the change straight away and updates reminders. There's no separate Save schedule step.
-- **Ends** has a switch: turn it off for a [moment](#moments), a block with only a start time. The list shows *Moment* instead of the length.
-- **Ring even on silent**, at the top of **Reminders**, makes each of the block's reminders ring as an alarm. See [Ringing even on silent](#ringing-even-on-silent).
-- **Own reminders**, at the top of the Type menu, makes the **Reminders** section editable for this block alone, starting from its type's settings. With a type, the section shows that type's reminders, read-only. Choosing a type again asks first. See [A block's own reminders](#a-blocks-own-reminders).
-- **Save** stays greyed out until the block has a name, ends after it starts (or has no end), and repeats on at least one day. Overlapping blocks are allowed; the block shows which one it overlaps.
-- **＋** adds a block, following the Mac's rule: it starts where your latest block ends, lasts 30 minutes, and copies that block's days and type.
-- **Swipe left** on a block to delete it. **Undo** appears for a few seconds.
+- **＋** asks what to add: **Event**, **Repeated event** or **Block**. A new event or block follows the Mac's rule: it starts where your latest one ends and copies its days (a block lasts 30 minutes and takes its type).
+- **Tap an event or block** to edit it. **Event · Block** at the top switches between them, as on the Mac. **Save** applies the change straight away and updates reminders. There's no separate Save schedule step.
+- An **event** has a name, a time, its days and its **Alarm**: the sound (or [several](#several-sounds-for-one-reminder)) and Fade in. It always rings as an alarm, through silent mode and Focus. The first event you save asks whether DayFlow may set alarms. See [Ringing even on silent](#ringing-even-on-silent).
+- A **block** has a type, start and end times, days and its four **Reminders**. **Ring even on silent**, at the top of **Reminders**, makes each of them ring as an alarm. **Own reminders**, at the top of the Type menu, makes the **Reminders** section editable for this block alone, starting from its type's settings; with a type, the section shows that type's reminders, read-only. Choosing a type again asks first. See [A block's own reminders](#a-blocks-own-reminders).
+- **Save** stays greyed out until it has a name, repeats on at least one day and, for a block, ends after it starts. Overlapping blocks are allowed; the block shows which one it overlaps.
+- **Swipe left** to delete. **Undo** appears for a few seconds.
 - **New type…** in the Type menu adds a block type and opens its reminders.
+
+**Repeated events** work as on the Mac (see [Repeated events](#repeated-events)): **＋ → Repeated event** asks for a name, **First at**, **Last at**, **Every** (minutes), days and the alarm's sound, shows how many events that makes, and **Create** checks with you first, *Create 17 "Drink water" events?*. Then:
+
+- Their rows show **↻**. Tapping one asks: **Edit all events in this repeat** (the repeat's form, which makes the events again when you save) or **Edit only this one** (it leaves the repeat and becomes an event of its own).
+- Swiping one to delete asks: **Delete all 17 events in this repeat**, or **Delete only this one**.
+- **Group repeats**, at the top of the list, shows each repeat as one row. Tapping it edits the whole repeat.
 
 **Day** shows one weekday as an hour grid, like the Calendar app:
 
-- **Press and hold** a block, then drag, to move it. Times snap to 5 minutes, with a light tick. A moment is a thin line at its time; hold and drag it to move it.
+- **Press and hold** a block, then drag, to move it. Times snap to 5 minutes, with a light tick. An event is a pill with a bell 🔔 and its time; hold and drag it to move it. A repeat's events (marked ↻) don't drag: change the repeat instead.
+- On today's weekday, a checked-off event's pill is gold with a star, and anything skipped today is struck through.
 - A held block shows **handles** at its top and bottom edges. Drag one to change its start or end time. A block can't be shorter than 5 minutes.
 - **Tap** a block to edit it. **Tap an empty slot** to add a 30-minute block there.
 - If the block repeats on several days, DayFlow asks after each change: **This day only** (the block is split off for that day, and the original keeps its other days) or **All N days**. A block on just one day never asks.
 - With VoiceOver, use the actions to move a block, or change its length, 5 minutes at a time.
+
+### Today on iPhone
+
+Today works as on the Mac (see [Checking off events](#checking-off-events)):
+
+- Each event in **Today's flow** has a round **check**. Tap it when you've done it: the row turns gold with a star, and the cheer-up drops in from the top, *Nice! 3 of 6 done today*, with your streak. It goes by itself, or tap it. Tap the check again to uncheck it. Checking off an event before its time cancels today's alarm; unchecking brings it back.
+- **Swipe a row left** for **Skip today**: the event or block is struck through and greyed, and its reminders and alarms don't ring today. A skipped block leaves the dial, the countdown and the Live Activity. Swipe again for **Bring back**. Everything is back the next morning.
+- **★ 3 of 6** and **🔥 5** at the top count today's events done and your [streak](#your-streak), with the Mac's rules. The iPhone keeps its own checks and streak; they aren't exported.
+- An event's alarm has **Done** beside Stop. It stops the alarm and checks the event off without opening DayFlow; the cheer-up shows the next time you open it. If DayFlow can't set alarms, the event's notification has **Done** instead (press and hold it).
 
 ### How reminders work on iPhone
 
@@ -625,7 +706,7 @@ The reminders themselves are the Mac's: the same four per type, the same wording
 
 What's different on iPhone:
 
-- **The silent switch and Focus apply**, except to blocks that [ring even on silent](#ringing-even-on-silent). With the switch on silent, reminders vibrate without a sound. During a Focus, iOS holds DayFlow's notifications back unless you allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.
+- **The silent switch and Focus apply**, except to events and to blocks that [ring even on silent](#ringing-even-on-silent). With the switch on silent, reminders vibrate without a sound. During a Focus, iOS holds DayFlow's notifications back unless you allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.
 - **There's no Snooze** and no reminder cards. Swipe a notification away when you're done with it.
 - **Meeting reminders** with a video link have a **Join** button (press and hold the notification to see it). Tapping the notification joins too. Without a link, the button is **Open in Calendar**.
 - **Tapping a block reminder** opens Today.
@@ -635,13 +716,13 @@ What's different on iPhone:
 
 ### Ringing even on silent
 
-For a block you can't afford to miss, such as *Take medicine*, turn on **Ring even on silent** at the top of its **Reminders** section. Each of its reminders then rings as an **alarm**, like the Clock app's: through the silent switch and any Focus, on the Lock Screen and in the Dynamic Island, until you tap **Stop**. It needs iOS 26 or later; on earlier versions the switch isn't shown, and the block's reminders are normal ones.
+Every **event** rings as an **alarm**, like the Clock app's: through the silent switch and any Focus, on the Lock Screen and in the Dynamic Island, until you tap **Stop**, or **Done** to check it off. For a **block** you can't afford to miss, turn on **Ring even on silent** at the top of its **Reminders** section, and each of its reminders rings that way too. Alarms need iOS 26 or later; on earlier versions events ring as normal reminders and the switch isn't shown.
 
-- **Every reminder the block has** rings this way: Start preparation, Start, Heads-up and Time's up, whichever are on (a moment has just the first two). Each uses its own sound, at your volume, with Fade in if it's set. When one of its reminders merges with another block's, the merged reminder rings as an alarm too.
-- **The first time** you turn it on, iOS asks whether DayFlow may set alarms. If you say no, the switch turns back off and says why, with **Open Settings**: turn on **Alarms** in **Settings → Apps → DayFlow**, then turn the switch on again. If you later turn Alarms off there, the block's reminders come as normal reminders, quiet on silent, and its edit sheet says *Alarms are off in Settings*.
-- An **alarm clock** ⏰ marks these blocks in the list, the day view and Today's flow.
+- **Every reminder the block has** rings this way: Start preparation, Start, Heads-up and Time's up, whichever are on. Each uses its own sound, at your volume, with Fade in if it's set. When one of its reminders merges with another block's, the merged reminder rings as an alarm too.
+- **The first time** you save an event or turn the switch on, iOS asks whether DayFlow may set alarms. If you say no, the switch turns back off and says why, with **Open Settings**: turn on **Alarms** in **Settings → Apps → DayFlow**, then turn the switch on again. If you later turn Alarms off there, the block's reminders come as normal reminders, quiet on silent, and its edit sheet says *Alarms are off in Settings*.
+- An **alarm clock** ⏰ marks these blocks in the list, the day view and Today's flow. Events don't need it: they all ring.
 - **Turn off reminders** turns their alarms off too, and **Turn on** brings them back. Turning off **Play sounds** in Settings → Sounds makes them normal, silent reminders.
-- Alarms are set ahead of time like notifications, and don't count towards the 62. Up to 48 are set at once; any after that are normal reminders until DayFlow next runs.
+- Alarms are set ahead of time like notifications, and don't count towards the 62. Up to 48 are set at once; any after that are normal reminders until DayFlow next runs. A repeat every 30 minutes uses 17 a day, so open DayFlow every couple of days to keep them all alarms.
 - **Snooze** isn't offered, as with every reminder on iPhone: tap Stop.
 
 ### Sounds on iPhone
@@ -650,7 +731,7 @@ The 18 built-in sounds are the same as the Mac's.
 
 - iOS plays a reminder's sound at your **ringer volume**. DayFlow's **Volume** (Settings → Sounds) sets how loud DayFlow is within that, so it can make sounds quieter than the ringer but never louder.
 - **Fade in** works as on the Mac: the sound starts at 10% and grows to your volume over its first 8 seconds. DayFlow builds the fade and volume into its own copy of each sound, so they work even while the app is closed.
-- Choosing a sound plays it, and **Play** plays it again. **Previews play even when the iPhone is on silent**, because you tapped them; reminders still follow the switch.
+- Choosing a sound plays it, and **Play** plays it again. For events and blocks' reminders, tap a sound's **circle** to check it, and check several to [shuffle them](#several-sounds-for-one-reminder); tapping its name plays it. Each ring picks one at random, never the one it played last, and **Play** plays a random one. **Previews play even when the iPhone is on silent**, because you tapped them; reminders still follow the switch.
 
 **Your own sounds** work as on the Mac, with the Clips folder in the Files app: **On My iPhone → DayFlow → Clips**. In Settings → Sounds, **Add a clip** offers:
 
@@ -698,8 +779,11 @@ Your clips are in **On My iPhone → DayFlow → Clips**. Your schedule, types a
 **Reminders don't make a sound.**
 Check the silent switch (on silent, reminders only vibrate), then the ringer volume, then **Settings → Sounds → Play sounds** in DayFlow.
 
-**A block set to ring even on silent doesn't.**
-Open the block: if it says *Alarms are off in Settings*, tap **Open Settings** and turn on **Alarms**. Alarms need iOS 26 or later.
+**An event, or a block set to ring even on silent, doesn't ring through silent.**
+Open it: if it says DayFlow isn't allowed to set alarms, tap **Open Settings** and turn on **Alarms**. Alarms need iOS 26 or later.
+
+**A repeat's later events came as quiet reminders.**
+DayFlow sets 48 alarms ahead. Open DayFlow every couple of days so it can set the next ones.
 
 **Reminders don't show during a Focus.**
 Allow DayFlow in that Focus: **Settings → Focus →** the Focus **→ Apps → Add DayFlow**.

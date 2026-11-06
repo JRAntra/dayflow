@@ -14,14 +14,108 @@ public enum ScheduleEdits {
 
     /// The first problem that stops a block being saved, or nil. Overlaps don't stop it.
     public static func problem(_ b: Block) -> String? {
-        if b.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Give this block a name." }
+        if b.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return b.isEvent ? "Give this event a name." : "Give this block a name." }
         guard let s = HHMM.minutes(b.start) else { return "Set a start time." }
         if !b.isMoment {
             guard let e = HHMM.minutes(b.end) else { return "Set a start and end time." }
             if e <= s { return "End time must be after the start time." }
         }
-        if b.days.isEmpty { return "Pick at least one day, or this block never runs." }
+        if b.days.isEmpty { return b.isEvent ? "Pick at least one day, or this event never rings." : "Pick at least one day, or this block never runs." }
         return nil
+    }
+
+    // MARK: Events and blocks
+
+    /// A new event: at `start`, with the Start sound of your Default type.
+    public static func newEvent(start: Int, days: [Int], types: [BlockType]) -> Block {
+        .event(title: "", start: HHMM.string(start), days: days, alert: eventAlert(from: defaultStart(types)))
+    }
+
+    static func defaultStart(_ types: [BlockType]) -> Reminder {
+        (types.first(where: \.isDefault) ?? types.first)?.reminders.start ?? Specs.startingEventAlert
+    }
+
+    static func eventAlert(from r: Reminder) -> Reminder {
+        Reminder(on: true, sound: r.sound, fade: r.fade, sounds: r.sounds)
+    }
+
+    /// Event to block: it gets an end 30 minutes later and the Default type's reminders.
+    /// Block to event: it drops its end and reminders, and rings with its Start sound.
+    public static func switched(_ b: Block, toEvent: Bool, types: [BlockType]) -> Block {
+        var out = b
+        if toEvent {
+            guard !b.isEvent else { return b }
+            let start = b.hasOwnReminders ? (b.reminders ?? Specs.startingTypeReminders).start
+                : (types.first { $0.id == b.type } ?? types.first(where: \.isDefault))?.reminders.start ?? Specs.startingEventAlert
+            out.end = ""
+            out.type = Specs.eventType
+            out.reminders = nil
+            out.ringOnSilent = nil
+            out.alert = eventAlert(from: start)
+        } else {
+            guard b.isEvent else { return b }
+            out.end = HHMM.string(min(b.startMin + 30, 23 * 60 + 59))
+            if out.endMin <= out.startMin { out.start = HHMM.string(out.endMin - 30) }
+            out.type = Specs.defaultType
+            out.alert = nil
+            out.series = nil
+        }
+        return out
+    }
+
+    // MARK: Repeats
+
+    /// The times a repeat rings, in minutes: from `first`, every `every` minutes, up to `last`
+    /// (included when the gap lands on it). Stops early past the most a repeat may make.
+    public static func repeatTimes(_ r: RepeatRule) -> [Int] {
+        guard let f = HHMM.minutes(r.first), let l = HHMM.minutes(r.last), r.every > 0, l > f else { return [] }
+        return Array(stride(from: f, through: l, by: r.every).prefix(Specs.maxRepeatEvents + 1))
+    }
+
+    /// What stops a repeat being made, or nil.
+    public static func repeatProblem(title: String, days: [Int], rule: RepeatRule) -> String? {
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Give this event a name." }
+        guard let f = HHMM.minutes(rule.first), let l = HHMM.minutes(rule.last) else { return "Set the first and last times." }
+        if l <= f { return "The last time must be after the first." }
+        if !Specs.repeatEvery.contains(rule.every) { return "Every must be from 1 to 720 minutes." }
+        if days.isEmpty { return "Pick at least one day, or this event never rings." }
+        let n = repeatTimes(rule).count
+        if n < 2 { return "That makes only one event. Make the gap shorter, or the last time later." }
+        if n > Specs.maxRepeatEvents { return "That would make more than \(Specs.maxRepeatEvents) events. Make the gap longer." }
+        return nil
+    }
+
+    /// The events a repeat makes. Each id is the repeat's id and its time, so making the repeat
+    /// again keeps the ids (and today's checks and skips) of the times it still has.
+    public static func makeRepeat(title: String, days: [Int], alert: Reminder, rule: RepeatRule) -> [Block] {
+        repeatTimes(rule).map { m in
+            .event(id: "\(rule.id)-\(HHMM.string(m).replacingOccurrences(of: ":", with: ""))", title: title,
+                   start: HHMM.string(m), days: days, alert: alert, series: rule)
+        }
+    }
+
+    /// The events of the repeat with this id.
+    public static func repeatEvents(_ id: String, in blocks: [Block]) -> [Block] {
+        blocks.filter { $0.series?.id == id }
+    }
+
+    /// Your plan with a repeat's events replaced by `events` (or removed, with none).
+    public static func replacingRepeat(_ id: String, with events: [Block], in blocks: [Block]) -> [Block] {
+        Sanitize.sortByStart(blocks.filter { $0.series?.id != id } + events)
+    }
+
+    /// "Every 30 min, 9:00 AM – 5:00 PM".
+    public static func repeatText(_ r: RepeatRule, time: (Int) -> String) -> String {
+        "Every \(TimeText.length(minutes: r.every)), \(time(HHMM.minutes(r.first) ?? 0)) – \(time(HHMM.minutes(r.last) ?? 0))"
+    }
+
+    /// Takes one event out of its repeat, as its own event with a new id; later changes to the
+    /// repeat leave it alone. Returns the event and the new plan.
+    public static func detached(_ b: Block, in blocks: [Block]) -> (Block, [Block]) {
+        var one = b
+        one.id = Block.newId()
+        one.series = nil
+        return (one, Sanitize.sortByStart(blocks.filter { $0.id != b.id } + [one]))
     }
 
     /// The first other block this one overlaps on a shared day. Moments never overlap anything.
@@ -51,7 +145,7 @@ public enum ScheduleEdits {
         return weekOrder.filter(set.contains).map { shortDayNames[$0] }.joined(separator: ", ")
     }
 
-    /// ＋ in the list: the new block starts where your latest block ends, lasts 30 minutes, and
+    /// ＋ in the list, Block: the new block starts where your latest block ends, lasts 30 minutes, and
     /// copies that block's days and type, as on the Mac.
     public static func newBlockAfterLatest(_ blocks: [Block]) -> Block {
         let last = blocks.enumerated().sorted { a, b in
@@ -63,7 +157,7 @@ public enum ScheduleEdits {
         // A block that ends at 23:59 leaves no room after it; start 30 minutes earlier instead.
         let startMin = endMin <= s ? max(0, endMin - 30) : s
         return Block(title: "", start: HHMM.string(startMin), end: HHMM.string(endMin),
-                     days: last?.days ?? Specs.weekdays, type: last?.type ?? Specs.defaultType, reminders: last?.reminders)
+                     days: last?.days ?? Specs.weekdays, type: last.map(blockType) ?? Specs.defaultType, reminders: last?.reminders)
     }
 
     /// Tapping an empty slot in the day view: a 30-minute block there on that day, with the type
@@ -73,8 +167,11 @@ public enum ScheduleEdits {
         let endMin = min(startMin + 30, 23 * 60 + 59)
         let before = blocks.filter { $0.days.contains(day) && $0.endMin <= startMin }.max { $0.endMin < $1.endMin }
         return Block(title: "", start: HHMM.string(startMin), end: HHMM.string(endMin),
-                     days: before?.days ?? [day], type: before?.type ?? Specs.defaultType, reminders: before?.reminders)
+                     days: before?.days ?? [day], type: before.map(blockType) ?? Specs.defaultType, reminders: before?.reminders)
     }
+
+    /// The type a new block copies from `b`: an event has none, so Default.
+    static func blockType(_ b: Block) -> String { b.isEvent ? Specs.defaultType : b.type }
 
     public static func snap(_ minute: Int) -> Int {
         Int((Double(minute) / Double(snapMinutes)).rounded()) * snapMinutes

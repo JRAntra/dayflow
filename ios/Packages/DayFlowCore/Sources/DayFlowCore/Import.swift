@@ -89,24 +89,40 @@ extension DataStore {
         var clipSlots: [(String, [String])] = []
         func soundFromFile(_ v: JSONValue?, _ label: String, _ fallback: String) -> String {
             guard let s = v?.string else { return fallback }
-            if Specs.builtinIds.contains(s) { return s }
-            guard s.hasPrefix("custom:") else { return fallback }
-            let fid = String(s.dropFirst("custom:".count))
-            if clipData[fid] != nil {
-                if let i = clipSlots.firstIndex(where: { $0.0 == fid }) { clipSlots[i].1.append(label) } else { clipSlots.append((fid, [label])) }
-                return s
+            if usable(s, label) { return s }
+            if s.hasPrefix("custom:") {
+                let fid = String(s.dropFirst("custom:".count))
+                if let why = badClips[fid] { problems.append("\(why) \(label) will use its starting sound.") } else { missing.append(label) }
             }
-            if let why = badClips[fid] { problems.append("\(why) \(label) will use its starting sound.") } else { missing.append(label) }
             return fallback
+        }
+        /// Whether a sound can be used: built in, or one of the file's clips (noted against `label`).
+        func usable(_ s: String, _ label: String) -> Bool {
+            if Specs.builtinIds.contains(s) { return true }
+            guard s.hasPrefix("custom:") else { return false }
+            let fid = String(s.dropFirst("custom:".count))
+            guard clipData[fid] != nil else { return false }
+            if let i = clipSlots.firstIndex(where: { $0.0 == fid }) {
+                if !clipSlots[i].1.contains(label) { clipSlots[i].1.append(label) }
+            } else { clipSlots.append((fid, [label])) }
+            return true
+        }
+        /// One reminder's sounds checked against the file. With several, the unusable ones are
+        /// dropped; only when none is left does it fall back to the starting sound.
+        func reminderFromFile(_ r: JSONValue?, _ label: String, _ fallback: String) -> JSONValue {
+            var o = r?.object ?? [:]
+            let all = ([r?["sound"]].compactMap { $0?.string }) + (r?["sounds"]?.array?.compactMap(\.string) ?? [])
+            var list: [String] = []
+            for s in all where !list.contains(s) && usable(s, label) { list.append(s) }
+            if list.isEmpty { list = [soundFromFile(r?["sound"], label, fallback)] }
+            o["sound"] = .string(list[0])
+            o["sounds"] = list.count > 1 ? .array(list.map(JSONValue.string)) : nil
+            return .object(o)
         }
         func withSounds<K: RawRepresentable>(_ src: JSONValue?, _ keys: [K], _ spec: (K) -> Specs.ReminderSpec, _ owner: String) -> JSONValue
         where K.RawValue == String {
             var o: [String: JSONValue] = [:]
-            for k in keys {
-                var r = src?[k.rawValue]?.object ?? [:]
-                r["sound"] = .string(soundFromFile(src?[k.rawValue]?["sound"], "\(owner) · \(spec(k).label)", spec(k).sound))
-                o[k.rawValue] = .object(r)
-            }
+            for k in keys { o[k.rawValue] = reminderFromFile(src?[k.rawValue], "\(owner) · \(spec(k).label)", spec(k).sound) }
             return .object(o)
         }
         let anyString: (String) -> Bool = { _ in true }
@@ -134,19 +150,28 @@ extension DataStore {
             problems.append("A sound clip is missing from the file, so \(missing.joined(separator: ", ")) will use the starting sound.")
         }
 
-        // A block's own reminders: their sounds are checked against the file's clips too.
+        // A block's own reminders and an event's alarm: their sounds are checked against the file's clips too.
         var scheduleValue = schedule?["blocks"]
         if let list = scheduleValue?.array {
             scheduleValue = .array(list.map { b in
-                guard b["type"]?.stringValue == Specs.ownType, b["reminders"]?.object != nil, var o = b.object else { return b }
+                guard var o = b.object else { return b }
                 let title = b["title"]?.stringValue ?? "A block"
-                o["reminders"] = withSounds(b["reminders"], TypeReminderKey.allCases, Specs.spec, title)
+                if b["type"]?.stringValue == Specs.ownType, b["reminders"]?.object != nil {
+                    o["reminders"] = withSounds(b["reminders"], TypeReminderKey.allCases, Specs.spec, title)
+                }
+                if b["alert"]?.object != nil {
+                    o["alert"] = reminderFromFile(b["alert"], "\(title) · \(Specs.eventSpec.label)", Specs.eventSpec.sound)
+                }
                 return .object(o)
             })
         }
         let blocks: [Block]
         do {
-            blocks = try Sanitize.blocks(scheduleValue, typeIds: Set(fileTypes.map(\.id)), fallback: fileDefault ?? Specs.defaultType)
+            // A moment from an older file becomes an event with its type's sound, from the file's types.
+            let asTypes = fileTypes.map { BlockType(id: $0.isDefault ? Specs.defaultType : $0.id, name: $0.name, reminders: $0.reminders) }
+                + (fileDefault.map { d in fileTypes.filter { $0.id == d }.map { BlockType(id: d, name: $0.name, reminders: $0.reminders) } } ?? [])
+            blocks = try Sanitize.blocks(scheduleValue, typeIds: Set(fileTypes.map(\.id)), fallback: fileDefault ?? Specs.defaultType,
+                                         types: asTypes.isEmpty ? types : asTypes)
         } catch {
             throw DataError("The schedule in that file has a problem: \((error as? DataError)?.message ?? error.localizedDescription)")
         }
@@ -158,6 +183,7 @@ extension DataStore {
             current: self.blocks.count,
             blocks: blocks.map { b in
                 if b.hasOwnReminders { return .init(block: b, typeName: Specs.ownTypeName) }
+                if b.isEvent { return .init(block: b, typeName: b.isRepeat ? "Repeated event" : "Event") }
                 let t = fileTypes.first { $0.id == b.type }
                 return .init(block: b, typeName: t.map { $0.isDefault ? defaultName : $0.name } ?? defaultName)
             },
@@ -185,14 +211,16 @@ extension DataStore {
         }
 
         func fromFile<K>(_ reminder: Reminder, _ key: K, _ spec: (K) -> Specs.ReminderSpec) throws -> Reminder {
-            guard reminder.sound.hasPrefix("custom:") else { return reminder }
-            let fid = String(reminder.sound.dropFirst("custom:".count))
             var r = reminder
-            if let clip = p.clips.first(where: { $0.id == fid }), !rejectClips.contains(fid) {
-                r.sound = try installClip(name: clip.name, ext: clip.ext, data: clip.data).soundId
-            } else {
-                r.sound = spec(key).sound
+            var list: [String] = []
+            for s in reminder.choices {
+                guard s.hasPrefix("custom:") else { list.append(s); continue }
+                let fid = String(s.dropFirst("custom:".count))
+                if let clip = p.clips.first(where: { $0.id == fid }), !rejectClips.contains(fid) {
+                    list.append(try installClip(name: clip.name, ext: clip.ext, data: clip.data).soundId)
+                }
             }
+            r.choices = list.isEmpty ? [spec(key).sound] : list
             return r
         }
         func typeFromFile(_ r: TypeReminders) throws -> TypeReminders {
@@ -232,7 +260,9 @@ extension DataStore {
 
         try saveBlocks(p.rawBlocks.map { b in
             var c = b
-            if b.hasOwnReminders, let r = b.reminders {
+            if b.isEvent {
+                c.alert = try fromFile(b.eventAlert, (), { _ in Specs.eventSpec }) // copies in the clips its alarm uses
+            } else if b.hasOwnReminders, let r = b.reminders {
                 c.reminders = try typeFromFile(r) // copies in the clips its own reminders use
             } else {
                 c.type = typeIds[b.type] ?? Specs.defaultType

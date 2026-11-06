@@ -63,7 +63,7 @@ final class DayFlowUITests: XCTestCase {
         let app = launch(onboarded: true)
         app.buttons["Schedule"].tap()
         app.buttons["List"].tap()
-        app.buttons["Add block"].tap()
+        app.add("Block")
         let save = app.buttons["Save"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         XCTAssertFalse(save.isEnabled, "Save needs a name first")
