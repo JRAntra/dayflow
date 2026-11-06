@@ -1,6 +1,5 @@
 import DayFlowCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// What the edit sheet is editing: a new block or an existing one, and, from the day view,
 /// which day you were looking at (for "This day only / All N days").
@@ -11,7 +10,7 @@ struct BlockEditing: Identifiable {
     var day: Int?
 }
 
-/// Schedule: your weekly plan, as a list or one day at a time, with Import, Export and Backups.
+/// Schedule: your weekly plan, as a list or one day at a time.
 struct ScheduleView: View {
     @Environment(AppModel.self) private var model
 
@@ -23,10 +22,6 @@ struct ScheduleView: View {
     @State private var repeatEditing: RepeatEditing?
     /// A repeat's event you tapped: edit all its events, or only this one?
     @State private var askRepeat: (block: Block, day: Int?)?
-    @State private var importing = false
-    @State private var preview: ImportPreview?
-    @State private var shareURL: URL?
-    @State private var showBackups = false
 
     var body: some View {
         @Bindable var model = model
@@ -53,6 +48,9 @@ struct ScheduleView: View {
                                       editRepeat: { b in repeatEditing = RepeatEditing(event: b) })
                     } else {
                         DayGridView(day: day) { open($0) }
+                            // Like Calendar's day view, the hour grid's text grows only so far, so
+                            // blocks and events keep their names on screen.
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                     }
                 }
                 .frame(maxHeight: .infinity)
@@ -60,7 +58,6 @@ struct ScheduleView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Schedule")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { moreMenu }
                 ToolbarItem(placement: .topBarTrailing) { addMenu }
             }
             .sheet(item: $editing) { e in BlockEditSheet(editing: e) }
@@ -76,28 +73,6 @@ struct ScheduleView: View {
                 Button("Cancel", role: .cancel) {}
             } message: { a in
                 Text(a.block.series.map { ScheduleEdits.repeatText($0, time: BlockRow.time) } ?? "")
-            }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
-                switch result {
-                case .success(let url): openImport(url)
-                case .failure(let error): model.showError(error)
-                }
-            }
-            .sheet(item: Binding(get: { preview.map { PreviewBox(preview: $0) } }, set: { preview = $0?.preview })) { box in
-                ImportPreviewSheet(preview: box.preview) { applySettings in
-                    model.applyImport(box.preview, applySettings: applySettings)
-                }
-            }
-            .sheet(item: Binding(get: { shareURL.map(ShareItem.init) }, set: { shareURL = $0?.url })) { item in
-                ShareSheet(items: [item.url]).presentationDetents([.medium, .large])
-            }
-            .navigationDestination(isPresented: $showBackups) {
-                BackupsView { url in openImport(url) }
-            }
-            .onChange(of: model.openedFile, initial: true) { _, url in
-                guard let url else { return }
-                model.openedFile = nil
-                openImport(url)
             }
         }
     }
@@ -135,40 +110,4 @@ struct ScheduleView: View {
             editing = e
         }
     }
-
-    var moreMenu: some View {
-        Menu {
-            Button { importing = true } label: { Label("Import…", systemImage: "square.and.arrow.down") }
-            Button {
-                do { shareURL = try model.exportFile() } catch { model.showError(error) }
-            } label: { Label("Export…", systemImage: "square.and.arrow.up") }
-            Button { showBackups = true } label: { Label("Backups", systemImage: "clock.arrow.circlepath") }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-        }
-        .accessibilityLabel("More")
-    }
-
-    func openImport(_ url: URL) {
-        do { preview = try model.readImport(url) } catch { model.showError(error) }
-    }
-}
-
-private struct PreviewBox: Identifiable {
-    let id = UUID()
-    let preview: ImportPreview
-}
-
-private struct ShareItem: Identifiable {
-    let url: URL
-    var id: String { url.path }
-}
-
-/// The share sheet (AirDrop, Files, Mail, Messages).
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }

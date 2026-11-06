@@ -92,15 +92,13 @@ public struct Planner: Sendable {
         types.first { $0.id == id } ?? types.first { $0.isDefault } ?? BlockType(id: Specs.defaultType, name: "Default")
     }
 
-    /// The reminders a block uses: its own, or its type's.
-    public func reminders(for b: Block) -> TypeReminders {
-        b.hasOwnReminders ? (b.reminders ?? Specs.startingTypeReminders) : typeOf(b.type).reminders
-    }
+    /// The reminders a block uses: its type's.
+    public func reminders(for b: Block) -> TypeReminders { typeOf(b.type).reminders }
 
-    /// "Focus", "Own" for a block with its own reminders, "Event" or "Repeated event".
+    /// "Focus", "Event" or "Repeated event".
     public func typeName(for b: Block) -> String {
         if b.isEvent { return b.isRepeat ? "Repeated event" : "Event" }
-        return b.hasOwnReminders ? Specs.ownTypeName : typeOf(b.type).name
+        return typeOf(b.type).name
     }
 
     // MARK: Times
@@ -125,7 +123,7 @@ public struct Planner: Sendable {
             .filter { includeSkipped || !skipped.contains($0.id) }
             .map { b -> DayBlock in
                 var copy = b
-                if !b.hasOwnReminders && !b.isEvent { copy.type = typeOf(b.type).id }
+                if !b.isEvent { copy.type = typeOf(b.type).id }
                 return DayBlock(block: copy, start: at(date, b.startMin), end: at(date, b.endMin))
             }
         return list.enumerated().sorted { a, b in

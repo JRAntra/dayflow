@@ -19,14 +19,14 @@ func write(_ bytes: [UInt8], _ url: URL) { try! Data(bytes).write(to: url) }
         try audio.write(to: data.appendingPathComponent("sounds/\(id).mp3"))
         try Data(#"[{"id":"\#(id)","name":"Old: bell","ext":"mp3"}]"#.utf8).write(to: data.appendingPathComponent("sounds.json"))
 
-        let s = DataStore(dir: data, backupsDir: root.appendingPathComponent("Backups"))
+        let s = DataStore(dir: data)
         #expect(s.clips.count == 1)
         #expect(s.clips[0].file == "Old- bell.mp3") // colons can't be in file names
         #expect(s.clips[0].id == id && s.clips[0].name == "Old: bell")
         #expect(FileManager.default.fileExists(atPath: s.clipsDir.appendingPathComponent("Old- bell.mp3").path))
         #expect(!FileManager.default.fileExists(atPath: data.appendingPathComponent("sounds").path))
         // And it sticks.
-        let again = DataStore(dir: data, backupsDir: root.appendingPathComponent("Backups"))
+        let again = DataStore(dir: data)
         #expect(again.clips[0].file == "Old- bell.mp3")
     }
 
@@ -68,7 +68,7 @@ func write(_ bytes: [UInt8], _ url: URL) { try! Data(bytes).write(to: url) }
 
     @Test func renamingOrDeletingTheFileChangesTheClip() throws {
         let s = tempStore()
-        try s.startSchedule(sample: true)
+        try s.startSchedule(); try s.addSampleDay()
         let clip = try s.installClip(name: "Ding", ext: "mp3", data: Data([1]))
         var types = s.types
         types[0].reminders.start.sound = clip.soundId
@@ -92,7 +92,7 @@ func write(_ bytes: [UInt8], _ url: URL) { try! Data(bytes).write(to: url) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("dayflow-noread-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let clipsPath = root.appendingPathComponent("Clips")
-        let s = DataStore(dir: root.appendingPathComponent("data"), backupsDir: root.appendingPathComponent("B"), clipsDir: clipsPath)
+        let s = DataStore(dir: root.appendingPathComponent("data"), clipsDir: clipsPath)
         try s.installClip(name: "Ding", ext: "mp3", data: Data([1]))
         // The folder is replaced by a file, so it can't be listed.
         try FileManager.default.removeItem(at: clipsPath)
@@ -132,19 +132,5 @@ func write(_ bytes: [UInt8], _ url: URL) { try! Data(bytes).write(to: url) }
         write([7, 7, 7], outside)
         try s.savePiece(Data([5]), ext: "m4a", name: "Elsewhere", source: outside)
         #expect(FileManager.default.fileExists(atPath: outside.path))
-    }
-
-    @Test func exportAndImportUseTheFolder() throws {
-        let a = tempStore()
-        try a.startSchedule(sample: true)
-        let clip = try a.installClip(name: "Ding", ext: "mp3", data: Data([1, 2]))
-        var types = a.types
-        types[0].reminders.end.sound = clip.soundId
-        try a.saveTypes(types)
-        let file = try JSONFile.encode(a.exportPayload())
-        let b = tempStore()
-        try b.applyImport(try b.readImport(file, fileName: "x.json"), applySettings: true)
-        #expect(b.clips.map(\.file) == ["Ding.mp3"])
-        #expect(try Data(contentsOf: b.clipURL(b.clips[0])) == Data([1, 2]))
     }
 }

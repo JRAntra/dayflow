@@ -9,8 +9,8 @@ import Foundation
 /// - An **event** has an empty `end`: it happens at its start time and rings once, with its
 ///   own `alert`. On iPhone it always rings as an alarm. Its `type` is "event".
 ///   An event made by a repeat ("Drink water every 30 min") carries that repeat in `series`.
-/// - A **block** has an end and four reminders, from its block type or, when `type` is "own",
-///   its own `reminders`. With `ringOnSilent` each reminder rings as an alarm on iPhone.
+/// - A **block** has an end and its block type's four reminders. With `ringOnSilent` each
+///   reminder rings as an alarm on iPhone.
 public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var title: String
@@ -18,8 +18,6 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var end: String
     public var days: [Int]
     public var type: String
-    /// The block's own reminders, when `type` is "own".
-    public var reminders: TypeReminders?
     /// true, or left out of the file when off.
     public var ringOnSilent: Bool?
     /// An event's one reminder: its sound(s) and fade.
@@ -28,9 +26,8 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var series: RepeatRule?
 
     public init(id: String = Block.newId(), title: String, start: String, end: String, days: [Int], type: String,
-                reminders: TypeReminders? = nil, ringsOnSilent: Bool = false, alert: Reminder? = nil, series: RepeatRule? = nil) {
+                ringsOnSilent: Bool = false, alert: Reminder? = nil, series: RepeatRule? = nil) {
         self.id = id; self.title = title; self.start = start; self.end = end; self.days = days; self.type = type
-        self.reminders = reminders
         self.ringOnSilent = ringsOnSilent ? true : nil
         self.alert = alert
         self.series = series
@@ -55,8 +52,6 @@ public struct Block: Codable, Hashable, Identifiable, Sendable {
     public var isMoment: Bool { isEvent }
     /// Made by a repeat.
     public var isRepeat: Bool { series != nil }
-    /// Reminders set on the block itself rather than taken from a block type.
-    public var hasOwnReminders: Bool { type == Specs.ownType }
     /// An event's reminder, or the starting one if it has none.
     public var eventAlert: Reminder {
         get { alert ?? Specs.startingEventAlert }

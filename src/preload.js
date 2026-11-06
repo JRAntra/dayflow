@@ -54,15 +54,13 @@ contextBridge.exposeInMainWorld('dayflow', {
   onShowSettings: (fn) => ipcRenderer.on('show-settings', () => fn()),
   saveBlockTypes: (types) => ipcRenderer.invoke('save-block-types', types),
 
-  // Export and import
-  exportSchedule: () => ipcRenderer.invoke('export-schedule'),
-  previewImport: () => ipcRenderer.invoke('preview-import'),
-  applyImport: (token, opts) => ipcRenderer.invoke('apply-import', token, opts),
-  showBackups: () => ipcRenderer.invoke('show-backups'),
+  // "Add a sample day": the eight sample blocks; returns the schedule.
+  addSampleDay: () => ipcRenderer.invoke('add-sample-day'),
 
-  // Window modes
-  setMode: (mode) => ipcRenderer.invoke('set-mode', mode),
-  onModeChanged: (fn) => ipcRenderer.on('mode-changed', (_e, mode) => fn(mode)),
+  // The window and the Mini timer
+  showWindow: () => ipcRenderer.invoke('show-window'),
+  setMini: (on) => ipcRenderer.invoke('set-mini', on),
+  onMiniChanged: (fn) => ipcRenderer.on('mini-changed', (_e, on) => fn(on)),
   miniDragStart: () => ipcRenderer.send('mini-drag-start'),
   miniDragEnd: () => ipcRenderer.send('mini-drag-end'),
   miniMenu: () => ipcRenderer.send('mini-menu'),

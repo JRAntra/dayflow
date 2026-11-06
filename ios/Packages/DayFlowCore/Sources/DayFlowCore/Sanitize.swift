@@ -74,8 +74,9 @@ public enum Sanitize {
     }
 
     /// Every block needs a name, a valid start, an end after it (or no end, for an event) and a
-    /// type that exists; an unknown type becomes `fallback`. A block with type "own" keeps its own
-    /// reminders (it falls back too if it has none). Days are cleaned and sorted, blocks sorted by start.
+    /// type that exists; an unknown type becomes `fallback`. Days are cleaned and sorted, blocks
+    /// sorted by start. (Blocks with their own reminders are turned into types first, by
+    /// `OwnReminders`.)
     ///
     /// An event (no end) has type "event" and one `alert`. A moment from before events existed
     /// becomes one: it keeps the sound and fade of its Start reminder (or of Start preparation,
@@ -117,15 +118,9 @@ public enum Sanitize {
                 out.append(.event(id: id, title: title, start: start, days: days, alert: a, series: series(b["series"])))
                 continue
             }
-            var type = b["type"]?.stringValue.flatMap { typeIds.contains($0) ? $0 : nil } ?? fallback
-            var own: TypeReminders?
-            if b["type"]?.stringValue == Specs.ownType, let r = b["reminders"], r.object != nil {
-                type = Specs.ownType
-                own = typeReminders(r, isSound: isSound)
-            }
+            let type = b["type"]?.stringValue.flatMap { typeIds.contains($0) ? $0 : nil } ?? fallback
             let rings = flag(b["ringOnSilent"], false)
-            out.append(Block(id: id, title: title, start: start, end: rawEnd, days: days, type: type, reminders: own,
-                             ringsOnSilent: rings))
+            out.append(Block(id: id, title: title, start: start, end: rawEnd, days: days, type: type, ringsOnSilent: rings))
         }
         return sortByStart(out)
     }
@@ -180,69 +175,36 @@ public enum Sanitize {
     }
 }
 
-/// Version 1 files set one sound per kind of reminder, and types could say "same as default".
-/// This turns that into types with four reminders without changing anything you'd hear,
-/// exactly as the Mac's upgradeV1 does. Sounds are passed through; the caller checks them.
-public enum UpgradeV1 {
+/// Blocks used to be able to carry their own four reminders (type "own"). Now a block's
+/// reminders always come from its type, so each such block becomes a type of its own, named
+/// after the block ("Run", or "Run (2)" if that name's taken), with those reminders.
+public enum OwnReminders {
     public struct Result {
-        public var types: [JSONValue]
-        public var blocks: [JSONValue]
-        public var meetings: JSONValue
+        public var types: [BlockType]
+        public var blocks: JSONValue
+        public var changed: Bool
     }
 
-    public static func run(settings s: JSONValue?, blockTypes oldTypes: JSONValue?, blocks: [JSONValue]) -> Result {
-        func pick(_ v: JSONValue?, _ d: String) -> String {
-            if let str = v?.string, !str.isEmpty, str != "default" { return str }
-            return d
-        }
-        let old = s?["sounds"]
-        let gStart = pick(old?["transition"], Specs.spec(TypeReminderKey.start).sound)
-        let gWarn = pick(old?["warning"], Specs.spec(.warn).sound)
-        let gEnd = pick(old?["end"], Specs.spec(.end).sound)
-        let gMeeting = pick(old?["meeting"], Specs.spec(MeetingReminderKey.start).sound)
-        let warn = Sanitize.clamp(s?["warnBeforeEndMin"], 0, 60, Specs.defaultLead) // 0 used to mean "no heads-up"
-        let lead5 = JSONValue.number(Double(Specs.defaultLead))
-        func reminders(_ sounds: JSONValue?) -> JSONValue {
-            .object([
-                "prep": .object(["on": .bool(false), "lead": lead5, "sound": .string(Specs.spec(.prep).sound)]),
-                "start": .object(["on": .bool(true), "sound": .string(pick(sounds?["transition"], gStart))]),
-                "warn": .object(["on": .bool(warn > 0), "lead": .number(Double(warn > 0 ? warn : Specs.defaultLead)),
-                                 "sound": .string(pick(sounds?["warning"], gWarn))]),
-                "end": .object(["on": .bool(true), "sound": .string(pick(sounds?["end"], gEnd))]),
-            ])
-        }
-        let source: [JSONValue] = oldTypes?.array
-            ?? Specs.starterNames.map { .object(["id": .string($0.lowercased()), "name": .string($0)]) }
-        let list = source.filter { !(($0["name"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
-        let trimmedName = { (t: JSONValue) in (nameOf(t)).trimmingCharacters(in: .whitespacesAndNewlines) }
-        let namedIndex = list.firstIndex { trimmedName($0).lowercased() == "default" }
-        let named = namedIndex.map { list[$0] }
-        var types: [JSONValue] = [.object([
-            "id": .string(Specs.defaultType),
-            "name": .string(named.map(trimmedName) ?? "Default"),
-            "isDefault": .bool(true),
-            "reminders": reminders(named?["sounds"]),
-        ])]
-        var ids: [String: String] = [:]
-        for (i, t) in list.enumerated() {
-            let tid = t["id"]?.stringValue ?? ""
-            if i == namedIndex { ids[tid] = Specs.defaultType; continue }
-            let id = tid == Specs.defaultType ? UUID().uuidString.lowercased() : tid
-            ids[tid] = id
-            types.append(.object(["id": .string(id), "name": .string(trimmedName(t)), "reminders": reminders(t["sounds"])]))
-        }
-        let lead = Sanitize.clamp(s?["meetingLeadMin"], 0, 60, Specs.defaultLead)
-        let newBlocks: [JSONValue] = blocks.map { b in
-            var o = b.object ?? [:]
-            o["type"] = .string(ids[b["type"]?.stringValue ?? "\u{0}"] ?? Specs.defaultType)
+    public static func toTypes(_ v: JSONValue?, types: [BlockType], isSound: (String) -> Bool) -> Result {
+        guard let list = v?.array else { return Result(types: types, blocks: v ?? .array([]), changed: false) }
+        var types = types
+        var changed = false
+        var names = Set(types.map { $0.name.lowercased() })
+        let out: [JSONValue] = list.map { b in
+            guard b["type"]?.stringValue == Specs.ownType, !(b["end"]?.string ?? "").isEmpty,
+                  let r = b["reminders"], r.object != nil, var o = b.object else { return b }
+            let base = String((b["title"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(34))
+            var name = base.isEmpty ? "Own reminders" : base
+            var n = 2
+            while names.contains(name.lowercased()) { name = "\(base.isEmpty ? "Own reminders" : base) (\(n))"; n += 1 }
+            names.insert(name.lowercased())
+            let t = BlockType(id: UUID().uuidString.lowercased(), name: name, reminders: Sanitize.typeReminders(r, isSound: isSound))
+            types.append(t)
+            o["type"] = .string(t.id)
+            o["reminders"] = nil
+            changed = true
             return .object(o)
         }
-        let meetings: JSONValue = .object([
-            "before": .object(["on": .bool(lead > 0), "lead": .number(Double(lead > 0 ? lead : Specs.defaultLead)), "sound": .string(gMeeting)]),
-            "start": .object(["on": .bool(true), "sound": .string(gMeeting)]),
-        ])
-        return Result(types: types, blocks: newBlocks, meetings: meetings)
+        return Result(types: types, blocks: .array(out), changed: changed)
     }
-
-    private static func nameOf(_ t: JSONValue) -> String { t["name"]?.stringValue ?? "" }
 }

@@ -7,9 +7,8 @@ import SwiftUI
 /// day, the Mac's checks. From the day view, a block that repeats on several days asks whether
 /// the change is for that day only.
 ///
-/// The Type menu starts with Own reminders: the block's reminder rows are then editable for this
-/// block alone (starting as a copy of its type's). With a type, the rows show that type's
-/// settings, read-only.
+/// A block's reminders are its type's: the Reminders section shows them in one line, and opens
+/// the type to change them.
 ///
 /// An event always rings as an alarm (iOS 26 and later); "Ring even on silent" does the same
 /// for every reminder of a block. The first time either needs alarms, iOS asks.
@@ -26,7 +25,8 @@ struct BlockEditSheet: View {
     @State private var askDays = false
     @State private var askDelete = false
     @State private var newTypeId: String?
-    @State private var askUseType: String?
+    /// The type whose reminders you opened from the Reminders section.
+    @State private var openType: String?
     /// The block it was before you switched it to an event, so switching back restores it.
     @State private var asBlock: Block?
     @State private var asEvent: Block?
@@ -70,8 +70,6 @@ struct BlockEditSheet: View {
                         .submitLabel(.done)
                     if !block.isEvent {
                         Picker("Type", selection: typeBinding) {
-                            Text("Own reminders").tag(Specs.ownType)
-                            Divider()
                             ForEach(model.types) { t in Text(t.name).tag(t.id) }
                             Divider()
                             Text("New type…").tag(Self.newTypeTag)
@@ -144,14 +142,7 @@ struct BlockEditSheet: View {
                 Button("Cancel", role: .cancel) {}
             }
             .navigationDestination(item: $newTypeId) { id in TypeDetailView(typeId: id) }
-            .confirmationDialog(askUseType.map { "Use \(model.typeOf($0).name)'s reminders instead?" } ?? "",
-                                isPresented: Binding(get: { askUseType != nil }, set: { if !$0 { askUseType = nil } }),
-                                titleVisibility: .visible, presenting: askUseType) { id in
-                Button("Use \(model.typeOf(id).name)'s reminders", role: .destructive) { useType(id) }
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("This block's own reminder settings are removed.")
-            }
+            .navigationDestination(item: $openType) { id in TypeDetailView(typeId: id) }
             .onAppear { if isNew { nameFocused = true } }
         }
         .presentationDragIndicator(.visible)
@@ -184,28 +175,15 @@ struct BlockEditSheet: View {
         })
     }
 
-    /// Picking "New type…" adds a type and opens its reminders; the block uses it. Own reminders
-    /// starts from a copy of the type's; leaving Own reminders for a type asks first.
+    /// Picking "New type…" adds a type and opens its reminders; the block uses it.
     var typeBinding: Binding<String> {
         Binding(get: { block.type }, set: { id in
             if id == Self.newTypeTag {
-                if let t = model.addType() { useType(t.id); newTypeId = t.id }
-            } else if id == Specs.ownType {
-                if !block.hasOwnReminders {
-                    block.reminders = model.typeOf(block.type).reminders
-                    block.type = Specs.ownType
-                }
-            } else if block.hasOwnReminders {
-                askUseType = id
+                if let t = model.addType() { block.type = t.id; newTypeId = t.id }
             } else {
                 block.type = id
             }
         })
-    }
-
-    func useType(_ id: String) {
-        block.type = id
-        block.reminders = nil
     }
 
     /// An event's one alarm: its sound or sounds, and fade.
@@ -233,27 +211,37 @@ struct BlockEditSheet: View {
         }
     }
 
-    /// The block's reminders: editable with Own reminders, otherwise its type's, read-only.
+    /// The block's reminders: its type's, in one line that opens the type to change them.
     @ViewBuilder var reminderSections: some View {
-        let own = block.hasOwnReminders
-        let source = own ? (block.reminders ?? Specs.startingTypeReminders) : model.typeOf(block.type).reminders
+        let t = model.typeOf(block.type)
         Section {
             if model.alarmAccess != .unsupported { ringRows }
+            Button { openType = t.id } label: {
+                LabeledContent {
+                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("From the \(t.name) type").foregroundStyle(.primary)
+                        Text(Self.summary(t.reminders)).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .accessibilityIdentifier("type-reminders")
         } header: {
             Text("Reminders")
         } footer: {
-            Text(own ? "Set just for this block." : "From the \(model.typeOf(block.type).name) type. Change it in Settings › Block types, or choose Own reminders above.")
+            Text("Changing them changes every \(t.name) block. For different reminders, choose another type, or New type….")
         }
-        ForEach(TypeReminderKey.allCases, id: \.self) { key in
-            ReminderSection(spec: Specs.spec(key), reminder: Binding(
-                get: { source[key] },
-                set: { r in
-                    guard block.hasOwnReminders else { return }
-                    var all = block.reminders ?? Specs.startingTypeReminders
-                    all[key] = r
-                    block.reminders = all
-                }), readOnly: !own)
-        }
+    }
+
+    /// "Start, Heads-up 5 min before the end, Time's up".
+    static func summary(_ r: TypeReminders) -> String {
+        var parts: [String] = []
+        if r.prep.on { parts.append("Get ready \(r.prep.lead ?? Specs.defaultLead) min before") }
+        if r.start.on { parts.append("Start") }
+        if r.warn.on { parts.append("Heads-up \(r.warn.lead ?? Specs.defaultLead) min before the end") }
+        if r.end.on { parts.append("Time's up") }
+        return parts.isEmpty ? "No reminders" : parts.joined(separator: ", ")
     }
 
     /// The switch, and why it can't ring when alarms aren't allowed.

@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-/// Your data on disk: the same four files as the Mac app, plus your clips and backups.
+/// Your data on disk: the same files as the Mac app, plus your clips.
 ///
 ///     <dir>/schedule.json      { "blocks": [...] }
 ///     <dir>/block-types.json   [ { id, name, reminders } ]
@@ -10,10 +10,8 @@ import CryptoKit
 ///     <dir>/progress.json      checks, skips and each day's result (this device only)
 ///     <clips>/<name>.<ext>     your clips, in a folder you can see (On My iPhone › DayFlow › Clips)
 ///     <clips>/Originals/       long songs you took a 30-second piece from
-///     <backups>/schedule-YYYY-MM-DD-HHMMSS-mmm.json   the newest ten
 public final class DataStore {
     public let dir: URL
-    public let backupsDir: URL
     /// The Clips folder. Files you put here become clips (see ClipFolder.swift).
     public let clipsDir: URL
     public internal(set) var blocks: [Block] = []
@@ -23,14 +21,6 @@ public final class DataStore {
     /// What you checked off and skipped, day by day. Kept on this device only, never exported.
     public internal(set) var progress = DayProgress()
 
-    /// 3: blocks can be moments (no end) and can carry their own reminders.
-    /// 4: blocks can ring even on silent (`ringOnSilent`).
-    /// 5: events (no end) have one `alert` and type "event"; repeats (`series`); reminders can
-    ///    have several `sounds`.
-    public static let exportVersion = 5
-    public static let maxImportBytes = 40 * 1024 * 1024
-    public static let maxBackups = 10
-
     var scheduleFile: URL { dir.appendingPathComponent("schedule.json") }
     var typesFile: URL { dir.appendingPathComponent("block-types.json") }
     var settingsFile: URL { dir.appendingPathComponent("settings.json") }
@@ -39,9 +29,8 @@ public final class DataStore {
     /// Where clips were kept before the Clips folder, as sounds/<id>.<ext>.
     var legacyClipsDir: URL { dir.appendingPathComponent("sounds", isDirectory: true) }
 
-    public init(dir: URL, backupsDir: URL, clipsDir: URL? = nil) {
+    public init(dir: URL, clipsDir: URL? = nil) {
         self.dir = dir
-        self.backupsDir = backupsDir
         self.clipsDir = clipsDir ?? dir.appendingPathComponent("Clips", isDirectory: true)
         load()
     }
@@ -57,8 +46,16 @@ public final class DataStore {
         moveLegacyClips()
         types = (try? Sanitize.types(read(typesFile) ?? JSONValue.from(Specs.starterTypes()), isSound: isSound)) ?? Specs.starterTypes()
         settings = Sanitize.settings(read(settingsFile), isSound: isSound)
-        let raw = read(scheduleFile)?["blocks"] ?? JSONValue.from(Specs.sampleSchedule())
+        var raw = read(scheduleFile)?["blocks"] ?? .array([])
+        // Blocks with their own reminders become types of their own.
+        let own = OwnReminders.toTypes(raw, types: types, isSound: isSound)
+        if own.changed, let clean = try? Sanitize.types(own.types, isSound: isSound) {
+            types = clean
+            raw = own.blocks
+            try? write(typesFile, types)
+        }
         blocks = (try? Sanitize.blocks(raw, typeIds: Set(types.map(\.id)), types: types, isSound: isSound)) ?? []
+        if own.changed { try? write(scheduleFile, ["blocks": blocks]) }
         progress = DayProgress.read(read(progressFile))
     }
 
@@ -84,10 +81,16 @@ public final class DataStore {
 
     // MARK: Saving
 
-    /// Starts the schedule: the sample, an empty one, or whatever was already there.
-    public func startSchedule(sample: Bool) throws {
-        try saveBlocks(sample ? Specs.sampleSchedule() : [])
+    /// Starts an empty schedule (with whatever types there are).
+    public func startSchedule() throws {
+        try saveBlocks(blocks)
         try write(typesFile, types)
+    }
+
+    /// "Add a sample day": the eight sample blocks, added to whatever you have, using Default.
+    public func addSampleDay() throws {
+        let taken = Set(blocks.map(\.id))
+        try saveBlocks(blocks + Specs.sampleSchedule().map { b in var c = b; if taken.contains(c.id) { c.id = Block.newId() }; return c })
     }
 
     public func saveBlocks(_ list: [Block]) throws {
@@ -102,11 +105,11 @@ public final class DataStore {
     /// Saves the type list; blocks whose type was deleted move to Default.
     public func saveTypes(_ list: [BlockType]) throws {
         let clean = try Sanitize.types(list, isSound: isSound)
-        let ids = Set(clean.map(\.id)).union([Specs.ownType]) // own reminders don't belong to a type
+        let ids = Set(clean.map(\.id))
         types = clean
         try write(typesFile, types)
-        if blocks.contains(where: { !ids.contains($0.type) }) {
-            try saveBlocks(blocks.map { b in var c = b; if !ids.contains(c.type) { c.type = Specs.defaultType }; return c })
+        if blocks.contains(where: { !$0.isEvent && !ids.contains($0.type) }) {
+            try saveBlocks(blocks.map { b in var c = b; if !b.isEvent && !ids.contains(c.type) { c.type = Specs.defaultType }; return c })
         }
     }
 
@@ -173,12 +176,6 @@ public final class DataStore {
         let settingsChanged = changed
         changed = false
         for i in blocks.indices {
-            if var r = blocks[i].reminders {
-                for key in TypeReminderKey.allCases where drop(&r[key], Specs.spec(key).sound) {
-                    reset.append("\(blocks[i].title) · \(Specs.spec(key).label)")
-                }
-                blocks[i].reminders = r
-            }
             if var a = blocks[i].alert {
                 if drop(&a, Specs.eventSpec.sound) { reset.append(blocks[i].title) }
                 blocks[i].alert = a
@@ -192,71 +189,6 @@ public final class DataStore {
         if blocksChanged { try write(scheduleFile, ["blocks": blocks]) }
         return reset
     }
-
-    // MARK: Export and backups
-
-    /// A backup carries every block type, so importing it puts the type list back exactly; an
-    /// ordinary export carries only the types its blocks use. Default is marked, so it matches
-    /// the Default of whoever imports the file, whatever either is called.
-    public func exportPayload(backup: Bool = false, now: Date = Date()) -> JSONValue {
-        let usedTypes = Set(blocks.map(\.type))
-        let list = types.filter { backup || usedTypes.contains($0.id) }
-        let usedSounds = Set(list.flatMap { $0.reminders.all.flatMap(\.choices) } + settings.meetings.all.map(\.sound)
-            + blocks.flatMap { ($0.reminders?.all.flatMap(\.choices) ?? []) + ($0.alert?.choices ?? []) })
-        var typeValues: [JSONValue] = []
-        for t in list {
-            var o = JSONValue.from(t).object ?? [:]
-            if t.isDefault { o["isDefault"] = .bool(true) }
-            typeValues.append(.object(o))
-        }
-        var out: [String: JSONValue] = [
-            "dayflowExport": .number(Double(Self.exportVersion)),
-            "exportedAt": .string(ISO.string(now)),
-            "schedule": .object(["blocks": JSONValue.from(blocks)]),
-            "blockTypes": .array(typeValues),
-            "settings": .object(["volume": .number(Double(settings.volume)), "meetings": JSONValue.from(settings.meetings)]),
-            "clips": .array(clips.filter { usedSounds.contains($0.soundId) }.compactMap { c in
-                guard let data = try? Data(contentsOf: clipURL(c)) else { return nil }
-                return .object(["id": .string(c.id), "name": .string(c.name), "ext": .string(c.ext), "data": .string(data.base64EncodedString())])
-            }),
-        ]
-        if backup { out["backup"] = .bool(true) }
-        return .object(out)
-    }
-
-    public static func exportFileName(now: Date = Date(), calendar: Calendar = .current) -> String {
-        let c = calendar.dateComponents([.year, .month, .day], from: now)
-        return String(format: "DayFlow schedule %04d-%02d-%02d.json", c.year!, c.month!, c.day!)
-    }
-
-    /// Saves a payload to the backups folder, keeping the newest ten.
-    @discardableResult
-    public func writeBackup(_ payload: JSONValue, now: Date = Date(), calendar: Calendar = .current) throws -> URL {
-        try FileManager.default.createDirectory(at: backupsDir, withIntermediateDirectories: true)
-        let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second, .nanosecond], from: now)
-        let name = String(format: "schedule-%04d-%02d-%02d-%02d%02d%02d-%03d.json",
-                          c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!, (c.nanosecond ?? 0) / 1_000_000)
-        var url = backupsDir.appendingPathComponent(name)
-        // Two backups in the same millisecond: keep both.
-        var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = backupsDir.appendingPathComponent(name.replacingOccurrences(of: ".json", with: "-\(n).json")); n += 1
-        }
-        try JSONFile.encode(payload).write(to: url, options: .atomic)
-        let old = backups().dropFirst(Self.maxBackups)
-        for f in old { try? FileManager.default.removeItem(at: f) }
-        return url
-    }
-
-    /// Backups, newest first.
-    public func backups() -> [URL] {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: backupsDir.path)) ?? []
-        return names.filter { $0.hasPrefix("schedule-") && $0.hasSuffix(".json") }.sorted().reversed()
-            .map { backupsDir.appendingPathComponent($0) }
-    }
-
-    @discardableResult
-    public func backupNow() throws -> URL { try writeBackup(exportPayload(backup: true)) }
 
     // MARK: Files
 

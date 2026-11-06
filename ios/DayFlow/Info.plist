@@ -14,18 +14,6 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>DayFlow schedule</string>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.json</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleTypeName</key>
 			<string>Sound clip</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -72,7 +60,7 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>DayFlow rings the reminders of blocks you set to "Ring even on silent" as alarms, so you hear them even when your iPhone is on silent or in Focus.</string>
+	<string>DayFlow rings your events, and the reminders of blocks you set to "Ring even on silent", as alarms, so you hear them even when your iPhone is on silent or in Focus.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>DayFlow reads the calendars you choose so it can remind you before meetings start.</string>
 	<key>NSCalendarsUsageDescription</key>

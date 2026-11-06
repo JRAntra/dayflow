@@ -115,7 +115,7 @@ pill.addEventListener('pointerdown', (e) => {
 });
 pill.addEventListener('pointerup', () => dayflow.miniDragEnd());
 pill.addEventListener('lostpointercapture', () => dayflow.miniDragEnd());
-pill.addEventListener('dblclick', () => dayflow.setMode('full'));
+pill.addEventListener('dblclick', () => dayflow.showWindow());
 pill.addEventListener('pointerenter', () => dayflow.miniHover(true));
 pill.addEventListener('pointerleave', () => dayflow.miniHover(false));
 pill.addEventListener('contextmenu', (e) => {

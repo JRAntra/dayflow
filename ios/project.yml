@@ -12,8 +12,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: 0.1.0-beta.1
-    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0-beta.4
+    CURRENT_PROJECT_VERSION: 4
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: ""
     TARGETED_DEVICE_FAMILY: "1"
@@ -64,7 +64,7 @@ targets:
         BGTaskSchedulerPermittedIdentifiers:
           - com.jrantra.dayflow.refresh
         NSSupportsLiveActivities: true
-        NSAlarmKitUsageDescription: DayFlow rings the reminders of blocks you set to "Ring even on silent" as alarms, so you hear them even when your iPhone is on silent or in Focus.
+        NSAlarmKitUsageDescription: DayFlow rings your events, and the reminders of blocks you set to "Ring even on silent", as alarms, so you hear them even when your iPhone is on silent or in Focus.
         NSCalendarsFullAccessUsageDescription: DayFlow reads the calendars you choose so it can remind you before meetings start.
         NSCalendarsUsageDescription: DayFlow reads the calendars you choose so it can remind you before meetings start.
         # dayflow://today, used by the Live Activity and widgets.
@@ -72,18 +72,12 @@ targets:
           - CFBundleURLName: com.jrantra.dayflow
             CFBundleURLSchemes:
               - dayflow
-        # Your Clips folder and backups show in the Files app under On My iPhone › DayFlow
+        # Your Clips folder shows in the Files app under On My iPhone › DayFlow
         # (it takes both of these).
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSMicrophoneUsageDescription: DayFlow uses the microphone only when you record a clip.
-        # "Open in DayFlow" for export files (AirDrop, Files, Mail).
         CFBundleDocumentTypes:
-          - CFBundleTypeName: DayFlow schedule
-            CFBundleTypeRole: Viewer
-            LSHandlerRank: Alternate
-            LSItemContentTypes:
-              - public.json
           # Share or AirDrop a sound to DayFlow to make it a clip. "Alternate": DayFlow is offered,
           # never the default app for audio.
           - CFBundleTypeName: Sound clip

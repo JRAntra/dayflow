@@ -28,14 +28,20 @@ final class DayFlowUITests: XCTestCase {
         let app = launch(onboarded: false)
         XCTAssertTrue(app.buttons["Get started"].waitForExistence(timeout: 10))
         app.buttons["Get started"].tap()
-        XCTAssertTrue(app.staticTexts["Your schedule"].waitForExistence(timeout: 5))
-        app.buttons["Continue"].tap()
         XCTAssertTrue(app.buttons["Turn on notifications"].waitForExistence(timeout: 5))
         app.buttons["Turn on notifications"].tap()
-        allowSystemAlert()
-
-        // Today, with the sample schedule.
-        XCTAssertTrue(app.tabBars.buttons["Today"].waitForExistence(timeout: 10) || app.buttons["Today"].waitForExistence(timeout: 2))
+        // iOS's permission prompt can take a while to appear in the Simulator; answer it
+        // whenever it does, until Today shows.
+        let todayTab = app.buttons["Today"]
+        for _ in 0..<15 where !todayTab.exists {
+            allowSystemAlert(timeout: 1)
+            _ = todayTab.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(todayTab.waitForExistence(timeout: 5), "The welcome screens should end on Today")
+        let sample = app.buttons.matching(identifier: "add-sample-day").firstMatch
+        XCTAssertTrue(sample.waitForExistence(timeout: 5), "An empty Today should offer the sample day")
+        sample.tap()
+        XCTAssertTrue(text(app, "Added the sample day").waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Today's flow"].waitForExistence(timeout: 5))
 
         // Settings › General shows how many reminders are scheduled.
@@ -53,7 +59,10 @@ final class DayFlowUITests: XCTestCase {
         // The test notification shows a banner while DayFlow is open.
         app.buttons["Send a test notification"].tap()
         let banner = springboard.otherElements.containing(NSPredicate(format: "label CONTAINS 'Test block'")).firstMatch
-        XCTAssertTrue(banner.waitForExistence(timeout: 10), "No test notification banner")
+        let seen = banner.waitForExistence(timeout: 10)
+        let shotB = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shotB.name = "banner-wait"; shotB.lifetime = .keepAlways
+        add(shotB)
+        XCTAssertTrue(seen, "No test notification banner")
         let shot = XCTAttachment(screenshot: springboard.screenshot())
         shot.name = "test-notification"; shot.lifetime = .keepAlways
         add(shot)

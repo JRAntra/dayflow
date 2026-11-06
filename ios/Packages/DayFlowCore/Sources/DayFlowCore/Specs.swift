@@ -3,9 +3,9 @@ import Foundation
 /// The starting values and fixed lists, the same as the Mac app's.
 public enum Specs {
     public static let defaultType = "default"
-    /// The type of a block with its own reminders (Own reminders in the Type menu).
+    /// Blocks used to be able to have their own reminders, with this type; they become types
+    /// of their own when DayFlow loads them (`OwnReminders`).
     public static let ownType = "own"
-    public static let ownTypeName = "Own"
     /// The type of an event: it has its own one reminder, never a block type's.
     public static let eventType = "event"
     public static let defaultLead = 5
@@ -79,15 +79,14 @@ public enum Specs {
         MeetingReminders(before: spec(MeetingReminderKey.before).starting, start: spec(MeetingReminderKey.start).starting)
     }
 
-    public static let starterNames = ["Focus", "Break", "Admin", "Meal"]
-
+    /// A new schedule starts with just Default; you add a type when a block should sound different.
     public static func starterTypes() -> [BlockType] {
-        [BlockType(id: defaultType, name: "Default")] + starterNames.map { BlockType(id: $0.lowercased(), name: $0) }
+        [BlockType(id: defaultType, name: "Default")]
     }
 
     public static let weekdays = [1, 2, 3, 4, 5]
 
-    /// The sample weekday schedule, the same eight blocks as the Mac's.
+    /// The sample weekday schedule ("Add a sample day"), the same eight blocks as the Mac's.
     public static func sampleSchedule() -> [Block] {
         [
             ("b1", "Plan the day", "09:00", "09:20"),

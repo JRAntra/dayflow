@@ -33,7 +33,6 @@ const FILES = {
   progress: path.join(DATA_DIR, 'progress.json'),
 };
 const SOUNDS_DIR = path.join(DATA_DIR, 'sounds');
-const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
 function readJSON(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
@@ -44,7 +43,8 @@ function writeJSON(file, data) {
 }
 
 const WEEKDAYS = [1, 2, 3, 4, 5];
-const DEFAULT_SCHEDULE = {
+// "Add a sample day": eight weekday blocks, all Default. A new schedule starts empty.
+const SAMPLE_SCHEDULE = {
   blocks: [
     { id: 'b1', title: 'Plan the day', start: '09:00', end: '09:20', days: WEEKDAYS },
     { id: 'b2', title: 'Deep work', start: '09:20', end: '11:30', days: WEEKDAYS },
@@ -218,7 +218,6 @@ function removeClip(id) {
   const settingsChanged = changed;
   changed = false;
   for (const b of schedule?.blocks || []) {
-    if (b.reminders) resetIn(b.reminders, REMINDERS, b.title);
     if (b.alert && drop(b.alert, EVENT_ALERT.sound)) reset.push(b.title);
   }
   if (settingsChanged) {
@@ -444,7 +443,7 @@ const DEFAULT_SETTINGS = {
   meetings: null, // filled in below, once MEETING_REMINDERS can be checked against
   launchAtLogin: false,
   shortcut: true,        // Control+Alt+D cycles the window modes
-  cards: true,           // show a reminder card as well as the macOS notification
+  alertStyle: 'cards',   // 'cards': a card that stays until you act; 'notifications': macOS notifications
   cardAutoClose: 0,      // minutes before a card closes itself; 0 = stays until you act
   offUntil: null,        // reminders are off until this moment (ms), for 1 or 24 hours
   remindersOff: false,   // reminders are off until you turn them on
@@ -459,7 +458,9 @@ function sanitizeSettings(next, prev) {
     meetings: sanitizeReminders(next.meetings || prev.meetings, MEETING_REMINDERS),
     launchAtLogin: flag(next.launchAtLogin, prev.launchAtLogin),
     shortcut: flag(next.shortcut, prev.shortcut),
-    cards: flag(next.cards, prev.cards),
+    // Earlier versions showed both, with cards: false turning cards off.
+    alertStyle: ['cards', 'notifications'].includes(next.alertStyle) ? next.alertStyle
+      : next.cards === false ? 'notifications' : (prev.alertStyle || 'cards'),
     cardAutoClose: [0, 1, 5].includes(Number(next.cardAutoClose)) ? Number(next.cardAutoClose) : prev.cardAutoClose,
     offUntil: next.offUntil === null ? null : (Number.isFinite(Number(next.offUntil)) && next.offUntil !== undefined ? Number(next.offUntil) : (prev.offUntil ?? null)),
     remindersOff: flag(next.remindersOff, prev.remindersOff ?? false),
@@ -473,9 +474,33 @@ function sanitizeSettings(next, prev) {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_TYPE = 'default';
-const STARTER_NAMES = ['Focus', 'Break', 'Admin', 'Meal'];
+const STARTER_NAMES = ['Focus', 'Break', 'Admin', 'Meal']; // what version 1 data started with
 const newType = (id, name) => ({ id, name, reminders: sanitizeReminders({}, REMINDERS) });
-const starterTypes = () => [newType(DEFAULT_TYPE, 'Default'), ...STARTER_NAMES.map((n) => newType(n.toLowerCase(), n))];
+// A new schedule starts with just Default; you add a type when a block should sound different.
+const starterTypes = () => [newType(DEFAULT_TYPE, 'Default')];
+
+// Blocks used to be able to carry their own four reminders (type "own"). Now a block's reminders
+// always come from its type, so each such block becomes a type of its own, named after the block
+// ("Run", or "Run (2)" if that's taken), with those reminders. Same as the iPhone's OwnReminders.
+const OWN_TYPE = 'own';
+function ownRemindersToTypes(blocks) {
+  if (!Array.isArray(blocks)) return { blocks, changed: false };
+  const names = new Set(blockTypes.map((t) => t.name.toLowerCase()));
+  let changed = false;
+  const out = blocks.map((b) => {
+    if (!b || b.type !== OWN_TYPE || !b.end || !b.reminders || typeof b.reminders !== 'object') return b;
+    const base = String(b.title || '').trim().slice(0, 34) || 'Own reminders';
+    let name = base;
+    for (let n = 2; names.has(name.toLowerCase()); n++) name = `${base} (${n})`;
+    names.add(name.toLowerCase());
+    const t = { id: crypto.randomUUID(), name, reminders: sanitizeReminders(b.reminders, REMINDERS) };
+    blockTypes.push(t);
+    changed = true;
+    const { reminders, ...rest } = b; // eslint-disable-line no-unused-vars
+    return { ...rest, type: t.id };
+  });
+  return { blocks: out, changed };
+}
 
 // Names must be unique (ignoring case). Default always comes first.
 function sanitizeTypes(list) {
@@ -551,34 +576,22 @@ function loadData() {
   const oldSettings = 'sounds' in raw.settings || 'warnBeforeEndMin' in raw.settings || 'meetingLeadMin' in raw.settings;
   const oldTypes = raw.blockTypes ? raw.blockTypes.some((t) => !t?.reminders) : !!raw.schedule;
   if (!oldSettings && !oldTypes) {
-    schedule = raw.schedule || DEFAULT_SCHEDULE;
     settings = sanitizeSettings(raw.settings, DEFAULT_SETTINGS);
     try { blockTypes = sanitizeTypes(raw.blockTypes || starterTypes()); } catch { blockTypes = starterTypes(); }
-    schedule = { blocks: sanitizeBlocks(schedule.blocks || []) };
+    const own = ownRemindersToTypes(raw.schedule?.blocks || []);
+    if (own.changed) { blockTypes = sanitizeTypes(blockTypes); writeJSON(FILES.blockTypes, blockTypes); }
+    schedule = { blocks: sanitizeBlocks(own.blocks) };
+    if (own.changed) writeJSON(FILES.schedule, schedule);
     loadProgress();
     return;
-  }
-
-  // Keep what was there, in the old export format, so importing it puts things back.
-  const used = new Set([...Object.values(raw.settings.sounds || {}), ...(raw.blockTypes || []).flatMap((t) => Object.values(t?.sounds || {}))]);
-  try {
-    writeBackup({
-      dayflowExport: 1,
-      exportedAt: new Date().toISOString(),
-      backup: true,
-      schedule: raw.schedule || { blocks: [] },
-      ...(raw.blockTypes ? { blockTypes: raw.blockTypes } : {}),
-      settings: raw.settings,
-      clips: clipsFor(used),
-    });
-  } catch (e) {
-    console.error('Could not back up before upgrading:', e.message);
   }
 
   const up = upgradeV1({ settings: raw.settings, blockTypes: raw.blockTypes, blocks: raw.schedule?.blocks || [] });
   blockTypes = sanitizeTypes(up.types);
   settings = sanitizeSettings({ ...raw.settings, meetings: up.meetings }, DEFAULT_SETTINGS);
-  schedule = { blocks: sanitizeBlocks(up.blocks) };
+  const own = ownRemindersToTypes(up.blocks);
+  blockTypes = sanitizeTypes(blockTypes);
+  schedule = { blocks: sanitizeBlocks(own.blocks) };
   writeJSON(FILES.blockTypes, blockTypes);
   writeJSON(FILES.settings, settings);
   writeJSON(FILES.schedule, schedule);
@@ -601,9 +614,8 @@ const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 const fmt = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 // A block with no end is an event: it happens at its start time and rings once, with its own
-// `alert`. Its end is its start, so it's never "the current block". A block of type "own"
-// carries its own reminders. Skipped ones are left out (unless includeSkipped).
-const OWN_TYPE = 'own';
+// `alert`. Its end is its start, so it's never "the current block". Skipped ones are left out
+// (unless includeSkipped).
 const isEvent = (b) => !b.end;
 function blocksFor(date, { includeSkipped = false } = {}) {
   const dow = date.getDay();
@@ -612,15 +624,15 @@ function blocksFor(date, { includeSkipped = false } = {}) {
     .filter((b) => Array.isArray(b.days) && b.days.includes(dow) && (isEvent(b) || toMin(b.end) > toMin(b.start)))
     .filter((b) => includeSkipped || !skipped.has(b.id))
     .map((b) => ({
-      id: b.id, title: b.title, type: isEvent(b) ? EVENT_TYPE : b.type === OWN_TYPE ? OWN_TYPE : typeOf(b.type).id, reminders: b.reminders,
+      id: b.id, title: b.title, type: isEvent(b) ? EVENT_TYPE : typeOf(b.type).id,
       moment: isEvent(b), event: isEvent(b), alert: b.alert, series: b.series || null, days: b.days,
       rings: !isEvent(b) && !!b.ringOnSilent, start: at(date, b.start), end: at(date, b.end || b.start),
     }))
     .sort((a, b) => a.start - b.start);
 }
-// The reminders a block uses: its own, or its type's.
-const remindersFor = (b) => (b.type === OWN_TYPE && b.reminders ? b.reminders : typeOf(b.type).reminders);
-const typeNameFor = (b) => (b.event ? (b.series ? 'Repeated event' : 'Event') : b.type === OWN_TYPE ? 'Own' : typeOf(b.type).name);
+// The reminders a block uses: its type's.
+const remindersFor = (b) => typeOf(b.type).reminders;
+const typeNameFor = (b) => (b.event ? (b.series ? 'Repeated event' : 'Event') : typeOf(b.type).name);
 
 // The times a repeat rings, in minutes.
 function repeatTimes(r) {
@@ -1135,7 +1147,7 @@ function cardData(id, ev) {
 }
 
 function showCard(ev, notification) {
-  if (!settings.cards || remindersOff()) return null;
+  if (settings.alertStyle !== 'cards' || remindersOff()) return null;
   const id = crypto.randomUUID();
   const w = new BrowserWindow({
     ...CARD_SIZE,
@@ -1243,14 +1255,15 @@ function cardAction(id, action) {
 
 const liveNotifications = new Set(); // keep references so click handlers aren't garbage-collected
 
+// One reminder: a card, or a macOS notification, as chosen in Settings → General.
 function fire(ev) {
-  let n = null;
-  if (Notification.isSupported()) {
-    n = new Notification({ title: ev.title, body: ev.body, silent: true });
+  if (settings.alertStyle === 'cards') {
+    showCard(ev, null);
+  } else if (Notification.isSupported()) {
+    const n = new Notification({ title: ev.title, body: ev.body, silent: true });
     liveNotifications.add(n);
     n.on('click', () => {
       send('stop-sound');
-      if (card) closeCard(card.id, { fromNotification: true });
       const url = ev.meeting ? ev.meeting.url || ev.meeting.htmlLink : null;
       if (url && /^https:\/\//.test(url)) shell.openExternal(url);
       else showWindow();
@@ -1259,7 +1272,6 @@ function fire(ev) {
     n.show();
     setTimeout(() => liveNotifications.delete(n), 10 * 60 * 1000);
   }
-  const card = showCard(ev, n);
   if (settings.sound) send('chime', { sound: ev.sound, fade: ev.fade, fallback: FALLBACK_SOUNDS[ev.role] });
 }
 
@@ -1291,13 +1303,12 @@ function tick() {
 }
 
 // ---------------------------------------------------------------------------
-// Window modes and tray
-// Full is the main window. Mini is a small floating timer. Backstage is tray only:
-// no window and no Dock icon. Reminders run the same in all three.
+// The window, the Mini timer and the menu bar icon
+// The window opens and closes like any Mac window; DayFlow keeps running in the menu bar, and
+// its Dock icon shows only while the window is open. The Mini timer, a small floating
+// countdown, is shown or hidden on its own. Reminders run the same either way.
 // ---------------------------------------------------------------------------
 
-const MODES = ['full', 'mini', 'backstage'];
-const MODE_LABELS = { full: 'Full window', mini: 'Mini timer', backstage: 'Backstage (tray only)' };
 const SHORTCUT = 'Control+Alt+D';
 const MINI_SIZE = { width: 268, height: 76 };
 
@@ -1308,14 +1319,15 @@ let quitting = false;
 let lastTrayLabel = '';
 let winReady = false;
 let showWhenReady = false;
-let mode = 'full';
 let shortcutActive = false;
 
-// lastCompact is where closing the full window takes you: the last Mini or Backstage you used.
+// windowOpen: whether the window was open when DayFlow last ran, so it reopens that way.
+// miniShown: the Mini timer is showing. (Earlier versions kept a "mode": full, mini or
+// backstage; it's read once to start the same way.)
 const savedWindow = readJSON(FILES.windowState, {});
 const windowState = {
-  mode: MODES.includes(savedWindow.mode) ? savedWindow.mode : 'full',
-  lastCompact: ['mini', 'backstage'].includes(savedWindow.lastCompact) ? savedWindow.lastCompact : 'backstage',
+  windowOpen: flag(savedWindow.windowOpen, savedWindow.mode ? savedWindow.mode === 'full' : true),
+  miniShown: flag(savedWindow.miniShown, savedWindow.mode === 'mini'),
   miniPos: savedWindow.miniPos || null,
   miniOnTop: flag(savedWindow.miniOnTop, true),
   quitNoteShown: flag(savedWindow.quitNoteShown, false), // the one-time "Quit DayFlow?" note
@@ -1373,42 +1385,43 @@ function send(channel, payload) {
   }
 }
 
-// Shows the full window. Outside Full mode this is a one-off peek: closing it returns to the mode.
-function showWindow() {
+// Opens the window (and the Dock icon with it).
+async function showWindow() {
   if (!win) return;
+  if (process.platform === 'darwin') await app.dock.show();
   if (!winReady) { showWhenReady = true; return; }
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
   if (process.platform === 'darwin') app.focus({ steal: true });
+  if (!windowState.windowOpen) { windowState.windowOpen = true; saveWindowState(); }
 }
 
-async function setMode(next, { persist = true } = {}) {
-  if (!MODES.includes(next)) return;
-  mode = next;
-  if (persist) {
-    windowState.mode = next;
-    if (next !== 'full') windowState.lastCompact = next;
-    saveWindowState();
-  }
+// Closes the window: DayFlow carries on in the menu bar, without a Dock icon.
+function hideWindow() {
+  showWhenReady = false;
+  if (win && !win.isDestroyed()) win.hide();
+  if (process.platform === 'darwin') app.dock.hide();
+  if (windowState.windowOpen) { windowState.windowOpen = false; saveWindowState(); }
+}
 
-  if (process.platform === 'darwin') {
-    if (next === 'backstage') app.dock.hide();
-    else await app.dock.show();
-  }
-  if (next === 'mini') { placeMini(); mini.showInactive(); } else mini.hide();
-  if (next === 'full') showWindow(); else { showWhenReady = false; win.hide(); }
+// ⌃⌥D: opens the window, or closes it if it's in front.
+function toggleWindow() {
+  if (win && win.isVisible() && win.isFocused()) hideWindow(); else showWindow();
+}
 
+function setMini(on) {
+  windowState.miniShown = !!on;
+  saveWindowState();
+  if (on) { placeMini(); mini.showInactive(); } else mini.hide();
   lastTrayLabel = '';
   updateTray(new Date());
-  send('mode-changed', mode);
+  send('mini-changed', windowState.miniShown);
 }
-
-const cycleMode = () => setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]);
 
 function applyShortcut() {
   if (shortcutActive) globalShortcut.unregister(SHORTCUT);
-  shortcutActive = settings.shortcut ? globalShortcut.register(SHORTCUT, cycleMode) : false;
+  shortcutActive = settings.shortcut ? globalShortcut.register(SHORTCUT, toggleWindow) : false;
 }
 
 function hardenWebContents(w) {
@@ -1457,12 +1470,11 @@ function createWindow() {
     if (!clipsWatcher) watchClipsFolder();
   });
 
-  // Closing Full drops you into your usual compact mode; closing a peek just hides it.
+  // Closing the window leaves DayFlow running in the menu bar.
   win.on('close', (e) => {
     if (quitting) return;
     e.preventDefault();
-    if (mode === 'full') setMode(windowState.lastCompact);
-    else win.hide();
+    hideWindow();
   });
   hardenWebContents(win);
 }
@@ -1486,7 +1498,7 @@ function createMini() {
   mini.loadFile(path.join(__dirname, 'renderer', 'mini.html'));
   mini.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   applyMiniOnTop();
-  mini.on('close', (e) => { if (!quitting) e.preventDefault(); }); // leave Mini by switching modes
+  mini.on('close', (e) => { if (!quitting) { e.preventDefault(); setMini(false); } });
   hardenWebContents(mini);
 }
 
@@ -1543,8 +1555,8 @@ function stopMiniDrag() {
 
 function showMiniMenu() {
   Menu.buildFromTemplate([
-    { label: 'Open full window', click: () => setMode('full') },
-    { label: 'Switch to Backstage', click: () => setMode('backstage') },
+    { label: 'Open DayFlow', click: showWindow },
+    { label: 'Hide Mini timer', click: () => setMini(false) },
     { type: 'separator' },
     {
       label: 'Always on top',
@@ -1579,12 +1591,14 @@ function onOffMenuItems() {
   return [{ label: 'Turn off reminders', submenu: Object.entries(TURN_OFF).map(([id, c]) => ({ label: c.label, click: () => turnOff(id) })) }];
 }
 
-// The tray menu doubles as the control panel in Backstage: what's on now, then the modes.
+// The tray menu is the control panel while the window is closed: what's on now, the window and
+// the Mini timer, turning reminders off.
 function buildTrayMenu(label) {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label, enabled: false },
     { type: 'separator' },
-    ...MODES.map((m) => ({ label: MODE_LABELS[m], type: 'radio', checked: mode === m, click: () => setMode(m) })),
+    { label: 'Open DayFlow', click: showWindow },
+    { label: 'Show Mini timer', type: 'checkbox', checked: windowState.miniShown, click: (item) => setMini(item.checked) },
     { type: 'separator' },
     ...onOffMenuItems(),
     { label: 'Sync calendar now', click: () => refreshMeetings() },
@@ -1614,282 +1628,11 @@ function updateTray(now) {
 }
 
 // ---------------------------------------------------------------------------
-// Export and import
-// An export holds the blocks, their block types, the reminder settings, and the custom clips
-// those sounds use.
-// Importing replaces the schedule, after backing up the current one in the same format.
-// ---------------------------------------------------------------------------
-
-// 3: blocks can be moments (no end) and carry their own reminders.
-// 4: blocks can ring even on silent on iPhone (ringOnSilent).
-// 5: events (no end) have one `alert` and type "event"; repeats (`series`); reminders can have
-//    several `sounds`.
-const EXPORT_VERSION = 5;
-const MAX_IMPORT_BYTES = 40 * 1024 * 1024;
-const MAX_BACKUPS = 10;
-let pendingImport = null; // what the import preview showed, waiting for Replace
-
-// The custom clips behind a set of sound ids, embedded for an export file.
-function clipsFor(soundIds) {
-  return customSounds.filter((c) => soundIds.has(customId(c.id))).flatMap((c) => {
-    try {
-      return [{ id: c.id, name: c.name, ext: c.ext, data: fs.readFileSync(clipPath(c)).toString('base64') }];
-    } catch { return []; }
-  });
-}
-
-const soundsIn = (reminders) => Object.values(reminders).flatMap(choicesOf);
-
-// A backup carries every block type, so importing it puts the type list back exactly;
-// an ordinary export carries only the types its blocks use. Default is marked, so it
-// matches the Default of whoever imports the file whatever either is called.
-function exportPayload({ backup = false } = {}) {
-  const usedTypes = new Set(schedule.blocks.map((b) => b.type));
-  const types = blockTypes.filter((t) => backup || usedTypes.has(t.id));
-  const used = new Set([...types.flatMap((t) => soundsIn(t.reminders)), ...soundsIn(settings.meetings),
-    ...schedule.blocks.flatMap((b) => [...(b.reminders ? soundsIn(b.reminders) : []), ...(b.alert ? choicesOf(b.alert) : [])])]);
-  return {
-    dayflowExport: EXPORT_VERSION,
-    exportedAt: new Date().toISOString(),
-    ...(backup ? { backup: true } : {}),
-    schedule: { blocks: schedule.blocks },
-    blockTypes: types.map((t) => (t.id === DEFAULT_TYPE ? { ...t, isDefault: true } : t)),
-    settings: { volume: settings.volume, meetings: settings.meetings },
-    clips: clipsFor(used),
-  };
-}
-
-function stamp(d = new Date()) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-}
-
-// Saves a payload to backups/, keeping the newest ten.
-function writeBackup(payload) {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  const now = new Date();
-  const file = path.join(BACKUP_DIR, `schedule-${stamp(now)}-${String(now.getMilliseconds()).padStart(3, '0')}.json`);
-  writeJSON(file, payload);
-  const old = fs.readdirSync(BACKUP_DIR).filter((f) => /^schedule-.*\.json$/.test(f)).sort().slice(0, -MAX_BACKUPS);
-  for (const f of old) { try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch {} }
-  return file;
-}
-const backupNow = () => writeBackup(exportPayload({ backup: true }));
-
-// Reads and checks an export file. Nothing changes until applyImport.
-function readImport(file) {
-  const notExport = "That file isn't a DayFlow export.";
-  let raw;
-  try {
-    if (fs.statSync(file).size > MAX_IMPORT_BYTES) throw new Error('That file is too large to be a DayFlow export.');
-    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (e) {
-    throw new Error(e.message.startsWith('That file') ? e.message : notExport);
-  }
-  if (!raw || typeof raw !== 'object' || !Number.isInteger(raw.dayflowExport)) throw new Error(notExport);
-  if (raw.dayflowExport > EXPORT_VERSION) {
-    throw new Error('That file was made by a newer version of DayFlow. Update DayFlow to import it.');
-  }
-
-  // Version 1 files had global sounds; convert them the same way your own data was upgraded.
-  let data = raw;
-  if (raw.dayflowExport === 1) {
-    const up = upgradeV1({ settings: raw.settings || {}, blockTypes: raw.blockTypes || [], blocks: raw.schedule?.blocks || [] });
-    data = {
-      ...raw,
-      schedule: { blocks: up.blocks },
-      // Without settings the file has no Default of its own, so its blocks join yours.
-      blockTypes: raw.settings ? up.types : up.types.filter((t) => !t.isDefault),
-      settings: raw.settings ? { volume: raw.settings.volume, meetings: up.meetings } : null,
-    };
-  }
-
-  const clips = new Map(); // the file's clip id -> { name, ext, buf }
-  const badClips = new Map(); // the file's clip id -> why it can't be used
-  for (const c of Array.isArray(data.clips) ? data.clips : []) {
-    const name = String(c?.name || 'Sound clip').slice(0, 60);
-    try {
-      const buf = Buffer.from(String(c.data || ''), 'base64');
-      clips.set(String(c.id), { name, ext: checkClip(name, c.ext, buf), buf });
-    } catch (e) {
-      badClips.set(String(c?.id), e.message);
-    }
-  }
-
-  // Each sound in the file is checked against its clips. clipSlots records which reminders
-  // each usable clip serves, so the window can name them if the clip turns out not to play.
-  const problems = [];
-  const missing = [];
-  const clipSlots = new Map();
-  function soundFromFile(v, label, fallback) {
-    if (BUILTIN_SOUNDS.includes(v)) return v;
-    if (typeof v !== 'string' || !v.startsWith('custom:')) return fallback;
-    const fid = v.slice('custom:'.length);
-    if (clips.has(fid)) {
-      clipSlots.set(fid, [...(clipSlots.get(fid) || []), label]);
-      return v;
-    }
-    if (badClips.has(fid)) problems.push(`${badClips.get(fid)} ${label} will use its starting sound.`);
-    else missing.push(label);
-    return fallback;
-  }
-  // Whether a sound can be used: built in, or one of the file's clips (noted against label).
-  function usable(v, label) {
-    if (BUILTIN_SOUNDS.includes(v)) return true;
-    if (typeof v !== 'string' || !v.startsWith('custom:') || !clips.has(v.slice(7))) return false;
-    const fid = v.slice(7);
-    const slots = clipSlots.get(fid) || [];
-    if (!slots.includes(label)) clipSlots.set(fid, [...slots, label]);
-    return true;
-  }
-  // A reminder's sounds checked against the file: with several, the unusable ones are dropped;
-  // only when none is left does it fall back (and say so).
-  function reminderFromFile(r, label, fallback) {
-    const list = [];
-    for (const v of [r?.sound, ...(Array.isArray(r?.sounds) ? r.sounds : [])]) if (!list.includes(v) && usable(v, label)) list.push(v);
-    if (!list.length) list.push(soundFromFile(r?.sound, label, fallback));
-    return { ...r, sound: list[0], ...(list.length > 1 ? { sounds: list } : { sounds: undefined }) };
-  }
-  const remindersFromFile = (src, spec, owner) => sanitizeReminders(
-    Object.fromEntries(Object.entries(spec).map(([k, s]) => [k, reminderFromFile(src?.[k], `${owner} · ${s.label}`, s.sound)])),
-    spec,
-    (v) => typeof v === 'string',
-  );
-
-  const types = new Map(); // the file's type id -> { name, isDefault, reminders }
-  const typeNames = new Set();
-  let fileDefault = null;
-  for (const t of Array.isArray(data.blockTypes) ? data.blockTypes : []) {
-    const name = String(t?.name || '').trim().slice(0, 40);
-    if (!name || typeNames.has(name.toLowerCase())) continue;
-    typeNames.add(name.toLowerCase());
-    const isDefault = t.isDefault === true && !fileDefault;
-    if (isDefault) fileDefault = String(t.id);
-    types.set(String(t.id), { name, isDefault, reminders: remindersFromFile(t.reminders, REMINDERS, name) });
-  }
-
-  let incoming = null;
-  if (data.settings && typeof data.settings === 'object') {
-    incoming = {
-      volume: clamp(data.settings.volume, 0, 100, settings.volume),
-      meetings: remindersFromFile(data.settings.meetings, MEETING_REMINDERS, 'Meetings'),
-    };
-  }
-  if (missing.length) problems.push(`A sound clip is missing from the file, so ${missing.join(', ')} will use the starting sound.`);
-
-  // A block's own reminders: their sounds are checked against the file's clips too.
-  // And an event's alarm. A moment from an older file becomes an event with its type's sound.
-  const fileBlocks = Array.isArray(data.schedule?.blocks) ? data.schedule.blocks.map((b) => {
-    if (!b || typeof b !== 'object') return b;
-    const out = { ...b };
-    if (b.type === OWN_TYPE && b.reminders) out.reminders = remindersFromFile(b.reminders, REMINDERS, String(b.title || 'A block'));
-    if (b.alert && typeof b.alert === 'object') out.alert = reminderFromFile(b.alert, `${b.title || 'An event'} · ${EVENT_ALERT.label}`, EVENT_ALERT.sound);
-    return out;
-  }) : data.schedule?.blocks;
-  const fileTypeReminders = (id) => (types.get(id) || [...types.values()].find((t) => t.isDefault))?.reminders || typeOf(id).reminders;
-  let blocks;
-  try { blocks = sanitizeBlocks(fileBlocks, new Set(types.keys()), fileDefault || DEFAULT_TYPE, (v) => typeof v === 'string', fileTypeReminders); } catch (e) {
-    throw new Error(`The schedule in that file has a problem: ${e.message}`);
-  }
-
-  const known = new Set(blockTypes.map((t) => t.name.toLowerCase()));
-  const newTypes = [...types.values()].filter((t) => !t.isDefault && !known.has(t.name.toLowerCase())).map((t) => t.name);
-  const isBackup = raw.backup === true;
-
-  pendingImport = { token: crypto.randomUUID(), blocks, settings: incoming, types, clips, isBackup };
-  return {
-    token: pendingImport.token,
-    fileName: path.basename(file),
-    current: schedule.blocks.length,
-    blocks: blocks.map((b) => {
-      if (b.type === OWN_TYPE) return { ...b, typeName: 'Own' };
-      if (isEvent(b)) return { ...b, typeName: b.series ? 'Repeated event' : 'Event' };
-      const t = types.get(b.type);
-      return { ...b, typeName: t ? (t.isDefault ? typeOf(DEFAULT_TYPE).name : t.name) : typeOf(DEFAULT_TYPE).name };
-    }),
-    newTypes,
-    isBackup,
-    hasSettings: !!incoming || types.size > 0,
-    problems,
-    // The window decodes these clips to check that they play and are short enough.
-    clips: [...clipSlots].map(([id, slots]) => ({ id, name: clips.get(id).name, data: clips.get(id).buf, slots: slots.join(', ') })),
-  };
-}
-
-function applyImport(token, { applySettings, rejectClips = [] }) {
-  const p = pendingImport;
-  if (!p || p.token !== token) throw new Error('That import has expired. Choose the file again.');
-  let backup;
-  try { backup = backupNow(); } catch (e) {
-    throw new Error(`DayFlow couldn't back up your current schedule, so nothing was changed. (${e.message})`);
-  }
-
-  // Copies in the clips a reminder needs; a clip that won't play gives way to the starting sound.
-  const oneFromFile = (r, fallback) => {
-    const list = [];
-    for (const v of choicesOf(r)) {
-      if (!v.startsWith('custom:')) { list.push(v); continue; }
-      const fid = v.slice('custom:'.length);
-      const clip = p.clips.get(fid);
-      if (clip && !rejectClips.includes(fid)) list.push(customId(installClip(clip.name, clip.ext, clip.buf).id));
-    }
-    const out = { ...r, ...cleanSounds({ sound: list[0], sounds: list }, fallback, () => true) };
-    if (!out.sounds) delete out.sounds;
-    return out;
-  };
-  const fromFile = (reminders, spec) => Object.fromEntries(Object.entries(reminders).map(([k, r]) => [k, oneFromFile(r, spec[k].sound)]));
-
-  // The file's Default is your Default; other types match by name. A backup with its
-  // settings applied replaces the list outright.
-  const typeIds = new Map(); // the file's type id -> your type id
-  if (p.isBackup && applySettings) {
-    const restored = [...p.types].map(([id, t]) => {
-      const mine = t.isDefault ? DEFAULT_TYPE : id;
-      typeIds.set(id, mine);
-      return { id: mine, name: t.name, reminders: fromFile(t.reminders, REMINDERS) };
-    });
-    if (!restored.some((t) => t.id === DEFAULT_TYPE)) restored.unshift(typeOf(DEFAULT_TYPE));
-    blockTypes = restored;
-  } else {
-    for (const [id, t] of p.types) {
-      let mine = t.isDefault
-        ? typeOf(DEFAULT_TYPE)
-        : blockTypes.find((x) => x.name.toLowerCase() === t.name.toLowerCase());
-      if (!mine) {
-        mine = newType(crypto.randomUUID(), t.name);
-        blockTypes.push(mine);
-      }
-      if (applySettings) mine.reminders = fromFile(t.reminders, REMINDERS);
-      typeIds.set(id, mine.id);
-    }
-  }
-  blockTypes = sanitizeTypes(blockTypes);
-  writeJSON(FILES.blockTypes, blockTypes);
-
-  schedule = { blocks: p.blocks.map((b) => {
-    if (isEvent(b)) return { ...b, alert: oneFromFile(b.alert, EVENT_ALERT.sound) }; // copies in the clips its alarm uses
-    if (b.type === OWN_TYPE) return { ...b, reminders: fromFile(b.reminders, REMINDERS) }; // and its own reminders
-    return { ...b, type: typeIds.get(b.type) || DEFAULT_TYPE };
-  }) };
-  writeJSON(FILES.schedule, schedule);
-  saveProgress();
-
-  if (applySettings && p.settings) {
-    settings = sanitizeSettings({ ...settings, volume: p.settings.volume, meetings: fromFile(p.settings.meetings, MEETING_REMINDERS) }, settings);
-    writeJSON(FILES.settings, settings);
-  }
-  pendingImport = null;
-  send('data-changed');
-  return { backup: path.basename(backup), blocks: schedule.blocks.length };
-}
-
-// ---------------------------------------------------------------------------
 // IPC
 // ---------------------------------------------------------------------------
 
 // Every block has a type: one that isn't in typeIds becomes the fallback (normally Default).
-// Type "own" keeps the block's own reminders (and falls back too if it has none). isSound checks
-// those reminders' sounds.
+// (Blocks with their own reminders become types first, in ownRemindersToTypes.)
 // No end (missing, null or empty) makes an event: type "event", one `alert`, maybe a repeat's
 // `series`. A moment from before events existed becomes one with the sound and fade of its Start
 // reminder (or Start preparation's, if only that was on), from its own reminders or its type's
@@ -1920,10 +1663,6 @@ function sanitizeBlocks(blocks, typeIds = new Set(blockTypes.map((t) => t.id)), 
       return out;
     }
     const out = { id, title, start: b.start, end, days, type: typeIds.has(String(b.type)) ? String(b.type) : fallback };
-    if (b.type === OWN_TYPE && b.reminders && typeof b.reminders === 'object') {
-      out.type = OWN_TYPE;
-      out.reminders = sanitizeReminders(b.reminders, REMINDERS, isSound);
-    }
     // On iPhone its reminders ring as alarms, through silent mode and Focus. Kept here so it
     // travels in export files; the Mac's own reminders don't change.
     if (b.ringOnSilent) out.ringOnSilent = true;
@@ -1942,7 +1681,7 @@ function registerIpc() {
     offStatus: offStatus(),
     builtinSounds: BUILTIN,
     blockTypes,
-    mode,
+    miniShown: windowState.miniShown,
     shortcutActive,
     platform: process.platform,
   }));
@@ -2122,48 +1861,29 @@ function registerIpc() {
     writeJSON(FILES.blockTypes, blockTypes);
     // Blocks whose type was deleted move to Default.
     const ids = new Set(blockTypes.map((t) => t.id));
-    ids.add(OWN_TYPE); // blocks with their own reminders don't belong to a type
-    if (schedule.blocks.some((b) => !ids.has(b.type))) {
-      schedule = { blocks: schedule.blocks.map((b) => ({ ...b, type: ids.has(b.type) ? b.type : DEFAULT_TYPE })) };
+    if (schedule.blocks.some((b) => !isEvent(b) && !ids.has(b.type))) {
+      schedule = { blocks: schedule.blocks.map((b) => (isEvent(b) || ids.has(b.type) ? b : { ...b, type: DEFAULT_TYPE })) };
       writeJSON(FILES.schedule, schedule);
     }
     send('data-changed');
     return { blockTypes, schedule };
   });
 
-  // Export and import -------------------------------------------------------
-
-  ipcMain.handle('export-schedule', async () => {
-    const { canceled, filePath } = await dialog.showSaveDialog(win, {
-      title: 'Export schedule',
-      defaultPath: path.join(app.getPath('documents'), `DayFlow schedule ${stamp().slice(0, 10)}.json`),
-      filters: [{ name: 'DayFlow schedule', extensions: ['json'] }],
-    });
-    if (canceled || !filePath) return null;
-    writeJSON(filePath, exportPayload());
-    return path.basename(filePath);
+  // "Add a sample day": the eight sample blocks, added to whatever you have.
+  ipcMain.handle('add-sample-day', () => {
+    const taken = new Set(schedule.blocks.map((b) => b.id));
+    const sample = SAMPLE_SCHEDULE.blocks.map((b) => ({ ...b, id: taken.has(b.id) ? crypto.randomUUID() : b.id, type: DEFAULT_TYPE }));
+    schedule = { blocks: sanitizeBlocks([...schedule.blocks, ...sample]) };
+    writeJSON(FILES.schedule, schedule);
+    saveProgress();
+    send('data-changed');
+    return schedule;
   });
 
-  ipcMain.handle('preview-import', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-      title: 'Import a schedule',
-      filters: [{ name: 'DayFlow schedule', extensions: ['json'] }],
-      properties: ['openFile'],
-    });
-    if (canceled || !filePaths[0]) return null;
-    return readImport(filePaths[0]);
-  });
+  // The window and the Mini timer -----------------------------------------------
 
-  ipcMain.handle('apply-import', (_e, token, opts) => applyImport(token, opts || {}));
-
-  ipcMain.handle('show-backups', () => {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    return shell.openPath(BACKUP_DIR);
-  });
-
-  // Window modes ------------------------------------------------------------
-
-  ipcMain.handle('set-mode', (_e, next) => setMode(next));
+  ipcMain.handle('show-window', () => showWindow());
+  ipcMain.handle('set-mini', (_e, on) => setMini(!!on));
   ipcMain.on('mini-drag-start', startMiniDrag);
   ipcMain.on('mini-drag-end', stopMiniDrag);
   ipcMain.on('mini-menu', showMiniMenu);
@@ -2245,16 +1965,19 @@ if (!app.requestSingleInstanceLock()) {
     loadData();
     registerIpc();
     setAppMenu();
-    // Opening at login always starts backstage, without forgetting the mode you last used.
+    // Opening at login always starts with the window closed, without forgetting how you left it.
     const atLogin = process.argv.includes('--hidden') ||
       (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin);
     createWindow();
     createMini();
     createTray();
-    setMode(atLogin ? 'backstage' : windowState.mode, { persist: false });
+    if (windowState.windowOpen && !atLogin) showWindow();
+    else if (process.platform === 'darwin') app.dock.hide();
+    if (windowState.miniShown) { placeMini(); mini.showInactive(); }
+    updateTray(new Date());
     applyShortcut();
     for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) {
-      screen.on(ev, () => { if (mode === 'mini') placeMini(); });
+      screen.on(ev, () => { if (windowState.miniShown) placeMini(); });
     }
 
     refreshMeetings();

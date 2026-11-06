@@ -19,7 +19,9 @@ struct SoundsSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Play sounds", isOn: Binding(get: { model.settings.sound }, set: { v in model.update { $0.sound = v } }))
+                Toggle("Play sounds", isOn: Binding(get: { model.settings.sound }, set: { v in withAnimation(.snappy) { model.update { $0.sound = v } } }))
+                // Off, there's no volume to set.
+                if model.settings.sound {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Volume")
@@ -40,9 +42,11 @@ struct SoundsSettingsView: View {
                         }
                     }
                 }
-                .disabled(!model.settings.sound)
+                }
             } footer: {
-                Text("Reminders play at your ringer volume; this sets how loud DayFlow is within it. It can make sounds quieter than the ringer, never louder. With the silent switch on, reminders vibrate without a sound.")
+                Text(model.settings.sound
+                     ? "Reminders play at your ringer volume; this sets how loud DayFlow is within it. It can make sounds quieter than the ringer, never louder. With the silent switch on, reminders vibrate without a sound."
+                     : "Reminders still show, without a sound. Events ring as silent reminders.")
             }
 
             Section {

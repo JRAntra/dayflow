@@ -57,16 +57,25 @@ function showView(name) {
   });
 }
 $('now-plan').addEventListener('click', () => showView('schedule'));
+$('now-sample').addEventListener('click', addSampleDay);
 
 // Brief messages, at the bottom of the window
 let toastTimer;
-function toast(msg, err = false) {
+// undo: a function; the message then has an Undo button, and stays a little longer.
+function toast(msg, err = false, undo = null) {
   const t = $('toast');
   t.textContent = msg;
+  if (undo) {
+    const b = document.createElement('button');
+    b.className = 'btn small toast-undo';
+    b.textContent = 'Undo';
+    b.addEventListener('click', () => { t.dataset.state = 'hidden'; undo(); });
+    t.append(b);
+  }
   t.classList.toggle('err', err);
   t.dataset.state = 'shown';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.dataset.state = 'hidden'; }, err ? 6000 : 3500);
+  toastTimer = setTimeout(() => { t.dataset.state = 'hidden'; }, err ? 6000 : undo ? 5000 : 3500);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,8 +94,12 @@ async function loadAll() {
   state.builtinSounds = all.builtinSounds;
   if (!typesTimer) state.blockTypes = all.blockTypes;
   state.shortcutActive = all.shortcutActive;
+  state.miniShown = all.miniShown;
   state.platform = all.platform;
-  if (!state.dirty) {
+  // The editor keeps its rows while one waits to be saved, or when this reload follows its own
+  // save (so typing isn't interrupted).
+  if (ownSaves > 0) ownSaves -= 1;
+  else if (!state.dirty) {
     state.draft = structuredClone(all.schedule.blocks);
     renderEditor();
   }
@@ -262,6 +275,7 @@ function renderNow() {
   const note = $('now-note');
   const badge = $('now-type');
   $('now-plan').hidden = true;
+  $('now-sample').hidden = true;
   badge.hidden = true;
 
   if (!blocks.length) {
@@ -271,6 +285,7 @@ function renderNow() {
       ? `Nothing repeats on ${DAY_NAMES[now.getDay()]}s, or you've skipped it all.`
       : 'Add events and the blocks of your day to get reminders.';
     $('now-plan').hidden = false;
+    $('now-sample').hidden = state.schedule.blocks.length > 0;
   } else if (current) {
     badge.hidden = false;
     badge.textContent = typeName(current.type);
@@ -407,16 +422,61 @@ setInterval(() => {
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const newId = () => `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-// Unsaved changes bring up the floating save bar.
-function setDirty(d) {
-  state.dirty = d;
-  $('savebar').dataset.state = d ? 'shown' : 'hidden';
-  if (d) setSaveText('Unsaved changes');
+// Changes save as you go: a moment after you stop typing (or straight away for a click), with
+// Undo in the message. A row with a problem isn't saved until it's fixed: it keeps its last
+// saved version (a new one isn't saved yet), stays outlined in red and says why.
+let saveTimer = null;
+let ownSaves = 0; // reloads that follow the editor's own saves, which leave its rows alone
+const rowOk = (b, i) => { const p = rowProblems(b, i); return !p || p.startsWith('Overlaps'); };
+function setDirty(d, delay = 700) {
+  if (!d) { state.dirty = false; return; }
+  state.dirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDraft, delay);
 }
-function setSaveText(msg, err = false) {
-  $('sched-status').textContent = msg;
-  $('sched-status').classList.toggle('err', err);
+async function saveDraft() {
+  clearTimeout(saveTimer);
+  const before = structuredClone(state.schedule.blocks);
+  const list = [];
+  state.draft.forEach((b, i) => {
+    if (rowOk(b, i)) list.push(b);
+    else { const old = before.find((x) => x.id === b.id); if (old) list.push(old); }
+  });
+  state.dirty = state.draft.some((b, i) => !rowOk(b, i));
+  if (JSON.stringify(list) === JSON.stringify(before)) return;
+  try {
+    ownSaves += 1;
+    state.schedule = await dayflow.saveSchedule(list);
+    toast('Saved', false, () => restoreSchedule(before));
+    loadToday();
+  } catch (e) {
+    ownSaves = Math.max(0, ownSaves - 1);
+    toast(cleanError(e), true);
+  }
 }
+// Undo: back to the schedule as it was before that save.
+async function restoreSchedule(blocks) {
+  clearTimeout(saveTimer);
+  ownSaves += 1;
+  state.schedule = await dayflow.saveSchedule(blocks);
+  state.draft = structuredClone(state.schedule.blocks);
+  state.dirty = false;
+  renderEditor();
+  toast('Undone');
+  loadToday();
+}
+async function addSampleDay() {
+  clearTimeout(saveTimer);
+  const before = structuredClone(state.schedule.blocks);
+  ownSaves += 1;
+  state.schedule = await dayflow.addSampleDay();
+  state.draft = structuredClone(state.schedule.blocks);
+  state.dirty = false;
+  renderEditor();
+  toast('Added the sample day: 8 blocks, Monday to Friday', false, () => restoreSchedule(before));
+  loadToday();
+}
+$('sched-sample').addEventListener('click', addSampleDay);
 const setSchedStatus = (msg, err = false) => toast(msg, err);
 
 // A block with no end is an event: it happens at its start time and rings once. Events never
@@ -457,19 +517,18 @@ function switchKind(b, toEvent) {
   if (toEvent === !b.end) return;
   const stash = kindStash.get(b) || {};
   if (toEvent) {
-    stash.block = { len: toMin(b.end) - toMin(b.start), type: b.type, reminders: b.reminders, ringOnSilent: b.ringOnSilent };
-    const r = b.type === OWN_TYPE && b.reminders ? b.reminders.start : (state.blockTypes.find((t) => t.id === b.type) || state.blockTypes[0]).reminders.start;
+    stash.block = { len: toMin(b.end) - toMin(b.start), type: b.type, ringOnSilent: b.ringOnSilent };
+    const r = (state.blockTypes.find((t) => t.id === b.type) || state.blockTypes[0]).reminders.start;
     b.alert = stash.event?.alert || alertFrom(r);
     b.end = '';
     b.type = 'event';
-    delete b.reminders; delete b.ringOnSilent;
+    delete b.ringOnSilent;
   } else {
     stash.event = { alert: b.alert };
     const startMin = toMin(b.start);
     b.end = hhmm(Math.min(startMin + (stash.block?.len || 30), 23 * 60 + 59));
     if (toMin(b.end) <= startMin) { b.start = hhmm(Math.max(0, toMin(b.end) - 30)); }
     b.type = stash.block?.type || DEFAULT_TYPE;
-    if (stash.block?.reminders) b.reminders = stash.block.reminders;
     if (stash.block?.ringOnSilent) b.ringOnSilent = true;
     delete b.alert; delete b.series;
   }
@@ -485,6 +544,7 @@ const grouped = () => { try { return localStorage.getItem(groupKey) === '1'; } c
 function renderEditor({ enter = null } = {}) {
   const list = $('block-list');
   list.innerHTML = '';
+  $('sched-empty').hidden = state.draft.length > 0;
   const hasRepeats = state.draft.some((b) => b.series);
   $('group-repeats-row').hidden = !hasRepeats;
   $('group-repeats').checked = grouped();
@@ -595,22 +655,7 @@ function renderEditor({ enter = null } = {}) {
           $('add-type').focus();
           return;
         }
-        if (typeSel.value === OWN_TYPE) {
-          // Own reminders start as a copy of the type's.
-          b.reminders = structuredClone(state.blockTypes.find((t) => t.id === b.type)?.reminders || state.blockTypes[0].reminders);
-          b.type = OWN_TYPE;
-          openRems.add(b.id);
-        } else if (b.type === OWN_TYPE) {
-          const name = typeName(typeSel.value);
-          if (!window.confirm(`Use ${name}'s reminders instead? This block's own reminder settings are removed.`)) {
-            fillTypeSelect(typeSel, b.type);
-            return;
-          }
-          b.type = typeSel.value;
-          delete b.reminders;
-        } else {
-          b.type = typeSel.value;
-        }
+        b.type = typeSel.value;
         setDirty(true);
         refreshNotes();
         renderBlockRems(li, b);
@@ -665,14 +710,12 @@ function askDeleteRepeat(b, { onlyAll = false } = {}) {
 // Block types: each block's dropdown starts with Own reminders, then your types, then "New type…".
 const NEW_TYPE = '__new';
 const DEFAULT_TYPE = 'default'; // can be renamed, never deleted
-const OWN_TYPE = 'own'; // a block with its own reminders
-const typeName = (id) => (id === OWN_TYPE ? 'Own' : state.blockTypes.find((t) => t.id === id)?.name || '');
+const typeName = (id) => state.blockTypes.find((t) => t.id === id)?.name || '';
 function fillTypeSelect(sel, value) {
-  sel.innerHTML = `<option value="${OWN_TYPE}">Own reminders</option><option disabled>──────</option>`
-    + state.blockTypes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')
+  sel.innerHTML = state.blockTypes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')
     + '<option disabled>──────</option>'
     + `<option value="${NEW_TYPE}">New type…</option>`;
-  sel.value = value === OWN_TYPE || state.blockTypes.some((t) => t.id === value) ? value : DEFAULT_TYPE;
+  sel.value = state.blockTypes.some((t) => t.id === value) ? value : DEFAULT_TYPE;
 }
 
 // The block's reminder rows under Reminders ▸. With a type they show its settings, read-only;
@@ -707,35 +750,27 @@ function renderBlockRems(li, b) {
     }
     return;
   }
-  const own = b.type === OWN_TYPE;
+  // A block's reminders are its type's: shown read-only (▶ still plays), with a link to the type.
   const spec = TYPE_REMINDERS;
   const type = state.blockTypes.find((t) => t.id === b.type) || state.blockTypes[0];
-  const reminders = own ? b.reminders : type.reminders;
-  box.innerHTML = `<p class="rems-note muted">${own ? 'Set just for this block.' : `From the ${esc(type.name)} type. Change it in Settings → Block types, or choose Own reminders.`}</p>`
+  box.innerHTML = `<p class="rems-note muted">From the ${esc(type.name)} type: changing them changes every ${esc(type.name)} block. <button type="button" class="link-btn edit-type">Edit ${esc(type.name)}…</button> For different reminders, choose another type.</p>`
     + reminderRowsHtml(spec, b.title || 'This block')
     + `<label class="ring-row"><input type="checkbox" class="switch ring-check"${b.ringOnSilent ? ' checked' : ''}>
         <span><strong>Ring on silent (iPhone)</strong>
         <span class="muted">On iPhone, each reminder rings like an alarm, through silent mode and Focus, until you tap Stop. Reminders on this Mac don't change.</span></span></label>`;
-  box.classList.toggle('read-only', !own);
-  fillReminderRows(box, reminders);
-  // The switch belongs to the block, so it can be changed with a type too.
+  box.classList.add('read-only');
+  fillReminderRows(box, type.reminders);
+  // The switch belongs to the block.
   box.querySelector('.ring-check').addEventListener('change', (e) => {
     if (e.target.checked) b.ringOnSilent = true; else delete b.ringOnSilent;
     li.querySelector('.ring-mark').innerHTML = b.ringOnSilent ? RING_ICON : '';
-    setDirty(true);
+    setDirty(true, 0);
   });
-  if (own) {
-    wireReminderRows(box, spec, () => {
-      b.reminders = { ...b.reminders, ...readReminderRows(box, spec) };
-      setDirty(true);
-    });
-  } else {
-    // Read-only, but ▶ still plays.
-    box.querySelectorAll('.rem-row input, .rem-row select, .rem-fade, .rem-sounds, .step-down, .step-up').forEach((el) => { el.disabled = true; });
-    box.querySelectorAll('.rem-play').forEach((btn) => {
-      btn.addEventListener('click', () => playRow(btn.closest('.rem-row'), null));
-    });
-  }
+  box.querySelector('.edit-type').addEventListener('click', () => { showView('settings'); showTab('types'); selectType(type.id); });
+  box.querySelectorAll('.rem-row input, .rem-row select, .rem-fade, .rem-sounds, .step-down, .step-up').forEach((el) => { el.disabled = true; });
+  box.querySelectorAll('.rem-play').forEach((btn) => {
+    btn.addEventListener('click', () => playRow(btn.closest('.rem-row'), null));
+  });
 }
 // Keeps the dropdowns current when types change while the schedule has unsaved edits.
 function refreshEditorTypes() {
@@ -743,7 +778,7 @@ function refreshEditorTypes() {
     const b = state.draft[Number(li.dataset.index)];
     const sel = li.querySelector('.type-select');
     if (!b || !sel) return; // an event, or a grouped repeat
-    if (b.type !== OWN_TYPE && !state.blockTypes.some((t) => t.id === b.type)) b.type = DEFAULT_TYPE;
+    if (!state.blockTypes.some((t) => t.id === b.type)) b.type = DEFAULT_TYPE;
     fillTypeSelect(sel, b.type);
   });
 }
@@ -776,8 +811,7 @@ function addItem(kind) {
     state.draft.push({ id, title: '', start, end: '', days, type: 'event', alert: alertFrom(defaultStart()) });
   } else {
     const type = last && last.end ? last.type : DEFAULT_TYPE;
-    state.draft.push({ id, title: '', start, end, days, type,
-      ...(type === OWN_TYPE && last.reminders ? { reminders: structuredClone(last.reminders) } : {}) });
+    state.draft.push({ id, title: '', start, end, days, type });
   }
   setDirty(true);
   renderEditor({ enter: id });
@@ -889,9 +923,8 @@ $('rep-confirm-go').addEventListener('click', () => {
   }));
   state.draft = [...state.draft.filter((b) => b.series?.id !== f.rule.id), ...events].sort((a, b) => toMin(a.start) - toMin(b.start));
   $('repeat-dialog').close();
-  setDirty(true);
   renderEditor();
-  setSaveText(`${events.length} ${f.title} events: Save schedule to keep them`);
+  setDirty(true, 0);
 });
 $('rep-delete').addEventListener('click', () => {
   const id = repeating.rule.id;
@@ -901,28 +934,6 @@ $('rep-delete').addEventListener('click', () => {
   $('repeat-dialog').close();
   setDirty(true);
   renderEditor();
-});
-
-$('discard').addEventListener('click', () => {
-  state.draft = structuredClone(state.schedule.blocks);
-  setDirty(false);
-  renderEditor();
-});
-
-$('save-schedule').addEventListener('click', async () => {
-  const bad = state.draft.map(rowProblems).find((p) => p && !p.startsWith('Overlaps'));
-  if (bad) { setSaveText('Fix the highlighted blocks first', true); return; }
-  try {
-    const saved = await dayflow.saveSchedule(state.draft);
-    state.schedule = saved;
-    state.draft = structuredClone(saved.blocks);
-    setDirty(false);
-    toast('Schedule saved');
-    renderEditor();
-    loadToday();
-  } catch (e) {
-    setSaveText(cleanError(e), true);
-  }
 });
 
 // ---------------------------------------------------------------------------
@@ -949,7 +960,12 @@ try { showTab(localStorage.getItem(TAB_KEY) || 'types', { animate: false }); } c
 function renderSettings() {
   const s = state.settings;
   $('set-sound').checked = !!s.sound;
-  $('set-cards').checked = !!s.cards;
+  $('volume-row').hidden = !s.sound; // no volume to set while sounds are off
+  $('set-alert-style').value = s.alertStyle || 'cards';
+  $('alert-style-note').textContent = (s.alertStyle || 'cards') === 'cards'
+    ? 'A card at the top right that stays until you act on it, with Snooze, Join and Done.'
+    : 'macOS notifications. They follow Focus and go to Notification Center.';
+  $('card-close-row').hidden = (s.alertStyle || 'cards') !== 'cards';
   $('set-card-close').value = String(s.cardAutoClose ?? 0);
   if (document.activeElement !== $('set-volume')) $('set-volume').value = s.volume;
   $('volume-val').textContent = `${$('set-volume').value}%`;
@@ -964,7 +980,8 @@ function renderSettings() {
   $('rail-kbd').hidden = !state.shortcutActive;
   $('set-shortcut').checked = !!s.shortcut;
   $('shortcut-note').textContent = s.shortcut && !state.shortcutActive
-    ? `Another app is already using ${key}, so the shortcut is off. Use the tray menu to switch modes.` : '';
+    ? `Another app is already using ${key}, so the shortcut is off. The menu bar icon opens the window.` : '';
+  $('mini-switch').checked = !!state.miniShown;
 
   const g = state.google;
   const steps = document.querySelectorAll('#pane-calendar .step');
@@ -1005,7 +1022,7 @@ function saveSettingsSoon(el, delay = 400) {
       meetings: readReminderRows($('meeting-rows'), MEETING_REMINDERS),
       launchAtLogin: $('set-login').checked,
       shortcut: $('set-shortcut').checked,
-      cards: $('set-cards').checked,
+      alertStyle: $('set-alert-style').value,
       cardAutoClose: $('set-card-close').value,
     });
     state.settings = saved.settings;
@@ -1014,7 +1031,7 @@ function saveSettingsSoon(el, delay = 400) {
     flashStatus(status, 'Settings saved');
   }, delay);
 }
-['set-sound', 'set-volume', 'set-login', 'set-shortcut', 'set-cards', 'set-card-close']
+['set-sound', 'set-volume', 'set-login', 'set-shortcut', 'set-alert-style', 'set-card-close']
   .forEach((id) => $(id).addEventListener('change', (e) => saveSettingsSoon(e.currentTarget)));
 $('set-volume').addEventListener('input', () => { $('volume-val').textContent = `${$('set-volume').value}%`; });
 $('test-notify').addEventListener('click', () => dayflow.testNotification());
@@ -1843,90 +1860,13 @@ function renderMeetings() {
   if (state.settings.meetings) fillReminderRows($('meeting-rows'), state.settings.meetings);
 }
 
-// ---------------------------------------------------------------------------
-// Export and import
-// ---------------------------------------------------------------------------
-
 const atToday = (hhmm) => { const d = new Date(); d.setHours(...hhmm.split(':').map(Number), 0, 0); return d; };
 
-$('export-schedule').addEventListener('click', async () => {
-  try {
-    const file = await dayflow.exportSchedule();
-    if (!file) return;
-    setSchedStatus(state.dirty
-      ? `Exported your saved schedule to ${file}. Unsaved changes weren't included.`
-      : `Exported to ${file}`);
-  } catch (e) {
-    setSchedStatus(cleanError(e), true);
-  }
-});
-
-$('show-backups').addEventListener('click', () => dayflow.showBackups());
-
-let pendingImport = null;
-$('import-schedule').addEventListener('click', async () => {
-  let preview;
-  try { preview = await dayflow.previewImport(); } catch (e) { setSchedStatus(cleanError(e), true); return; }
-  if (!preview) return;
-
-  // Clips the file's settings use must play here, or those reminders fall back to the default.
-  const rejected = [];
-  const problems = [...preview.problems];
-  for (const c of preview.clips) {
-    try { await checkClipPlays(c.name, c.data); } catch (e) {
-      rejected.push(c.id);
-      problems.push(`${cleanError(e)} ${c.slots} will use the default sound.`);
-    }
-  }
-  pendingImport = { token: preview.token, rejected };
-
-  $('imp-summary').textContent = `This will replace your ${plural(preview.current, 'block')} with ${plural(preview.blocks.length, 'block')} from ${preview.fileName}.`;
-  $('imp-blocks').innerHTML = preview.blocks.map((b) => `
-    <li><span class="time">${fmtRange(atToday(b.start), atToday(b.end))}</span>
-      <span>${esc(b.title)}${b.typeName ? ` <span class="muted">· ${esc(b.typeName)}</span>` : ''}</span>
-      <span class="muted">${b.days.map((d) => DAY_NAMES[d].slice(0, 3)).join(' ') || 'No days'}</span></li>`).join('');
-  $('imp-types').textContent = preview.isBackup
-    ? 'With settings applied, your block types go back to how they were in this backup.'
-    : preview.newTypes.length
-      ? `Adds ${plural(preview.newTypes.length, 'new block type')}: ${preview.newTypes.join(', ')}.`
-      : '';
-  $('imp-settings-row').hidden = !preview.hasSettings;
-  $('imp-settings').checked = preview.hasSettings;
-  $('imp-problems').innerHTML = problems.map((p) => `<li>${esc(p)}</li>`).join('');
-  $('imp-problems').hidden = !problems.length || !preview.hasSettings;
-  $('imp-unsaved').hidden = !state.dirty;
-  $('imp-error').textContent = '';
-  $('import-dialog').showModal();
-});
-
-$('imp-settings').addEventListener('change', () => {
-  $('imp-problems').hidden = !$('imp-settings').checked || !$('imp-problems').children.length;
-});
-$('imp-cancel').addEventListener('click', () => $('import-dialog').close());
-$('import-dialog').addEventListener('close', () => { pendingImport = null; });
-
-$('imp-apply').addEventListener('click', async () => {
-  if (!pendingImport) return;
-  try {
-    const result = await dayflow.applyImport(pendingImport.token, {
-      applySettings: $('imp-settings').checked,
-      rejectClips: pendingImport.rejected,
-    });
-    $('import-dialog').close();
-    setDirty(false);
-    await loadAll();
-    setSchedStatus(`Imported ${plural(result.blocks, 'block')}. Your previous setup was saved as ${result.backup}.`);
-  } catch (e) {
-    $('imp-error').textContent = cleanError(e);
-  }
-});
-
 // ---------------------------------------------------------------------------
-// Window modes
+// The Mini timer switch in the sidebar (also in the menu bar icon's menu)
 // ---------------------------------------------------------------------------
 
-document.querySelectorAll('[data-mode]').forEach((btn) => {
-  btn.addEventListener('click', () => dayflow.setMode(btn.dataset.mode));
-});
+$('mini-switch').addEventListener('change', (e) => dayflow.setMini(e.target.checked));
+dayflow.onMiniChanged((on) => { $('mini-switch').checked = on; });
 
 loadAll();

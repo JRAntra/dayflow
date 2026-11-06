@@ -14,10 +14,17 @@ final class TurnOffTests: XCTestCase {
         let app = XCUIApplication.launchFresh(["-uiTestReset"])
         // Through the welcome screens, allowing notifications, so reminders get scheduled.
         app.buttons["Get started"].tap()
-        app.buttons["Continue"].tap()
         app.buttons["Turn on notifications"].tap()
+        // The permission prompt can be slow to appear in the Simulator: answer it whenever it does.
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
-        if allow.waitForExistence(timeout: 5) { allow.tap() }
+        let todayTab = app.buttons["Today"]
+        for _ in 0..<15 where !todayTab.exists {
+            if allow.waitForExistence(timeout: 1) { allow.tap() }
+            _ = todayTab.waitForExistence(timeout: 1)
+        }
+        let sample = app.buttons.matching(identifier: "add-sample-day").firstMatch
+        XCTAssertTrue(sample.waitForExistence(timeout: 10))
+        sample.tap()
         XCTAssertTrue(app.staticTexts["Today's flow"].waitForExistence(timeout: 10))
 
         // Today: Turn off reminders… → Until I turn them on.
