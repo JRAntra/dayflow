@@ -1,7 +1,7 @@
 {
   "name": "dayflow",
   "productName": "DayFlow",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0-beta.5",
   "description": "A local desktop day planner that reminds you when each phase of your day starts and ends, plus Google Calendar meeting reminders.",
   "main": "src/main.js",
   "scripts": {
