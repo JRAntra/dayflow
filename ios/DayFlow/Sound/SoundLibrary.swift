@@ -8,10 +8,10 @@ import Foundation
 /// iOS plays a notification's sound itself, at the ringer volume, from start to end, so DayFlow
 /// can't turn it down or fade it in while it plays. Instead each sound is written out once with
 /// your volume and Fade in already applied, as a CAF file in Library/Sounds, where notifications
-/// look for sounds. The fade is the Mac's: from 10% to full over the first 8 seconds (or the
+/// look for sounds. The fade is the Mac's: from 10% to full over the first 7 seconds (or the
 /// whole clip, if it's shorter), and the volume is squared so the slider feels even.
 enum SoundLibrary {
-    static let fadeSeconds = 8.0
+    static let fadeSeconds = 7.0
     static let fadeStart: Float = 0.1
 
     /// Library/Sounds: the folder notifications read custom sounds from.
@@ -33,7 +33,7 @@ enum SoundLibrary {
 
     /// The file name of a rendered sound, e.g. "df-1a2b3c4d5e6f7a8b.caf".
     static func fileName(_ soundId: String, fade: Bool, volume: Int) -> String {
-        let key = "\(soundId)|\(fade ? "fade" : "flat")|\(volume)|v1"
+        let key = "\(soundId)|\(fade ? "fade" : "flat")|\(volume)|v2"
         let hash = SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
         return "df-\(hash).caf"
     }

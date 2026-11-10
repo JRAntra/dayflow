@@ -47,7 +47,7 @@ enum AudioEdit {
     }
 
     /// Writes frames of a buffer as an m4a, with an optional fade in (DayFlow's: from 10% over
-    /// up to 8 seconds) and a short fade out so a cut doesn't click.
+    /// up to 7 seconds) and a short fade out so a cut doesn't click.
     static func writeM4A(_ b: AVAudioPCMBuffer, range: Range<Int>? = nil, fadeIn: Bool = false, fadeOut: Double = 0, to url: URL) throws {
         let r = range ?? 0..<Int(b.frameLength)
         let format = b.format

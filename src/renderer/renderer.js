@@ -1085,9 +1085,9 @@ function clipBuffer(id) {
   return clipCache.get(id);
 }
 
-// Fade in: the sound starts at 10% of your volume and grows to full over its first 8 seconds
+// Fade in: the sound starts at 10% of your volume and grows to full over its first 7 seconds
 // (the whole of a short clip), so it doesn't startle you.
-const FADE_SECONDS = 8;
+const FADE_SECONDS = 7;
 
 // fallback: the sound to play instead if this one can't be loaded (a clip that's gone, say).
 async function play(soundId, fallback = null, volume = state.settings.volume, { fade = false } = {}) {
@@ -1321,7 +1321,7 @@ function mono(buffer, from = 0, to = buffer.length) {
   return out;
 }
 
-// Fade in (DayFlow's: from 10% over up to 8 seconds) and a short fade out, so a cut doesn't click.
+// Fade in (DayFlow's: from 10% over up to 7 seconds) and a short fade out, so a cut doesn't click.
 function shape(samples, rate, { fadeIn = false, fadeOut = 0 } = {}) {
   const inN = Math.max(1, Math.round(Math.min(samples.length / rate, FADE_SECONDS) * rate));
   const outN = Math.round(fadeOut * rate);

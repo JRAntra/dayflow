@@ -681,7 +681,7 @@ Every **event** rings as an **alarm**, like the Clock app's: through the silent 
 The 18 built-in sounds are the same as the Mac's.
 
 - iOS plays a reminder's sound at your **ringer volume**. DayFlow's **Volume** (Settings → Sounds) sets how loud DayFlow is within that, so it can make sounds quieter than the ringer but never louder.
-- **Fade in** works as on the Mac: the sound starts at 10% and grows to your volume over its first 8 seconds. DayFlow builds the fade and volume into its own copy of each sound, so they work even while the app is closed.
+- **Fade in** works as on the Mac: the sound starts at 10% and grows to your volume over its first 7 seconds. DayFlow builds the fade and volume into its own copy of each sound, so they work even while the app is closed.
 - Choosing a sound plays it, and **Play** plays it again. For events and blocks' reminders, tap a sound's **circle** to check it, and check several to [shuffle them](#several-sounds-for-one-reminder); tapping its name plays it. Each ring picks one at random, never the one it played last, and **Play** plays a random one. **Previews play even when the iPhone is on silent**, because you tapped them; reminders still follow the switch.
 
 **Your own sounds** work as on the Mac, with the Clips folder in the Files app: **On My iPhone → DayFlow → Clips**. In Settings → Sounds, **Add a clip** offers:
