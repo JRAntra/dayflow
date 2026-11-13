@@ -8,12 +8,10 @@ import Foundation
 /// iOS plays a notification's sound itself, at the ringer volume, from start to end, so DayFlow
 /// can't turn it down or fade it in while it plays. Instead each sound is written out once with
 /// your volume and Fade in already applied, as a CAF file in Library/Sounds, where notifications
-/// look for sounds. The fade is the Mac's: from 10% to full over the first 7 seconds (or the
-/// whole clip, if it's shorter), and the volume is squared so the slider feels even.
+/// look for sounds. The fade is the Mac's (`FadeIn`): 15 seconds, low for most of it, with a
+/// sound shorter than that written out several times back to back so the fade can finish. The
+/// volume is squared so the slider feels even.
 enum SoundLibrary {
-    static let fadeSeconds = 7.0
-    static let fadeStart: Float = 0.1
-
     /// Library/Sounds: the folder notifications read custom sounds from.
     static var soundsDir: URL {
         FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Sounds", isDirectory: true)
@@ -33,7 +31,7 @@ enum SoundLibrary {
 
     /// The file name of a rendered sound, e.g. "df-1a2b3c4d5e6f7a8b.caf".
     static func fileName(_ soundId: String, fade: Bool, volume: Int) -> String {
-        let key = "\(soundId)|\(fade ? "fade" : "flat")|\(volume)|v2"
+        let key = "\(soundId)|\(fade ? "fade" : "flat")|\(volume)|v3"
         let hash = SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
         return "df-\(hash).caf"
     }
@@ -66,24 +64,29 @@ enum SoundLibrary {
         }
     }
 
-    /// Reads the clip, applies the gain and fade, trims it to 30 seconds and writes 16-bit PCM.
+    /// Reads the clip (up to 30 seconds), repeats it until the fade is done if Fade in is on,
+    /// applies the gain and fade, and writes 16-bit PCM.
     static func render(_ src: URL, to out: URL, gain: Float, fade: Bool) throws {
         let input = try AVAudioFile(forReading: src)
         let format = input.processingFormat
         let maxFrames = AVAudioFrameCount(min(Double(input.length), Specs.maxClipSeconds * format.sampleRate))
-        guard maxFrames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: maxFrames) else {
+        guard maxFrames > 0, let one = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: maxFrames) else {
             throw DataError("That clip is empty.")
         }
-        try input.read(into: buffer, frameCount: maxFrames)
-        let frames = Int(buffer.frameLength)
-        let rampFrames = max(1, Int(min(Double(frames) / format.sampleRate, fadeSeconds) * format.sampleRate))
-        if let channels = buffer.floatChannelData {
+        try input.read(into: one, frameCount: maxFrames)
+        let length = Int(one.frameLength)
+        let plays = fade ? FadeIn.plays(Double(length) / format.sampleRate) : 1
+        guard length > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(length * plays)) else {
+            throw DataError("That clip is empty.")
+        }
+        buffer.frameLength = AVAudioFrameCount(length * plays)
+        if let from = one.floatChannelData, let channels = buffer.floatChannelData {
             for ch in 0..<Int(format.channelCount) {
                 let data = channels[ch]
-                for i in 0..<frames {
+                for i in 0..<(length * plays) {
                     var g = gain
-                    if fade && i < rampFrames { g *= fadeStart + (1 - fadeStart) * Float(i) / Float(rampFrames) }
-                    data[i] *= g
+                    if fade { g *= FadeIn.gain(at: Double(i) / format.sampleRate) }
+                    data[i] = from[ch][i % length] * g
                 }
             }
         }
