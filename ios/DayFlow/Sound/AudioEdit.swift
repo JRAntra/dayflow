@@ -46,8 +46,8 @@ enum AudioEdit {
         return max(0, first - Int(0.05 * rate)) ..< min(n, last + Int(0.25 * rate))
     }
 
-    /// Writes frames of a buffer as an m4a, with an optional fade in (DayFlow's: from 10% over
-    /// up to 7 seconds) and a short fade out so a cut doesn't click.
+    /// Writes frames of a buffer as an m4a, with an optional fade in (DayFlow's `FadeIn`, over
+    /// its first 15 seconds or the whole piece if it's shorter) and a short fade out so a cut doesn't click.
     static func writeM4A(_ b: AVAudioPCMBuffer, range: Range<Int>? = nil, fadeIn: Bool = false, fadeOut: Double = 0, to url: URL) throws {
         let r = range ?? 0..<Int(b.frameLength)
         let format = b.format
@@ -55,12 +55,12 @@ enum AudioEdit {
               let src = b.floatChannelData, let dst = out.floatChannelData else { throw DataError("There's nothing to save.") }
         out.frameLength = AVAudioFrameCount(r.count)
         let rate = format.sampleRate
-        let inFrames = max(1, Int(min(Double(r.count) / rate, SoundLibrary.fadeSeconds) * rate))
+        let inSeconds = min(Double(r.count) / rate, FadeIn.seconds)
         let outFrames = Int(fadeOut * rate)
         for c in 0..<Int(format.channelCount) {
             for i in 0..<r.count {
                 var g: Float = 1
-                if fadeIn && i < inFrames { g *= SoundLibrary.fadeStart + (1 - SoundLibrary.fadeStart) * Float(i) / Float(inFrames) }
+                if fadeIn { g *= FadeIn.gain(at: Double(i) / rate, over: inSeconds) }
                 if outFrames > 0 && i >= r.count - outFrames { g *= Float(r.count - i) / Float(outFrames) }
                 dst[c][i] = src[c][r.lowerBound + i] * g
             }

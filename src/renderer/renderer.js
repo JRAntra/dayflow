@@ -1085,9 +1085,20 @@ function clipBuffer(id) {
   return clipCache.get(id);
 }
 
-// Fade in: the sound starts at 10% of your volume and grows to full over its first 7 seconds
-// (the whole of a short clip), so it doesn't startle you.
-const FADE_SECONDS = 7;
+// Fade in: the sound starts at 10% of your volume, stays low for most of the fade and rises
+// smoothly to full at 15 seconds (under 50% at 10 seconds), so it doesn't startle you. A sound
+// shorter than that plays again and again until the fade is done. The iPhone's FadeIn
+// (DayFlowCore) is the same curve.
+const FADE_SECONDS = 15;
+// How loud the sound is t seconds into a fade of `length` seconds, from 0.1 to 1: a smoothstep
+// of (t/length)², so it starts and ends gently with no jump in between.
+function fadeGain(t, length = FADE_SECONDS) {
+  const x = length > 0 ? Math.min(Math.max(t / length, 0), 1) : 1;
+  const u = x * x;
+  return 0.1 + 0.9 * u * u * (3 - 2 * u);
+}
+// How many times a sound this long plays back to back so the fade can finish.
+const fadePlays = (duration) => (duration > 0 && duration < FADE_SECONDS ? Math.ceil(FADE_SECONDS / duration) : 1);
 
 // fallback: the sound to play instead if this one can't be loaded (a clip that's gone, say).
 async function play(soundId, fallback = null, volume = state.settings.volume, { fade = false } = {}) {
@@ -1105,16 +1116,18 @@ async function play(soundId, fallback = null, volume = state.settings.volume, { 
   const out = audio.createGain();
   out.connect(audio.destination);
   const t = audio.currentTime;
-  if (fade) {
-    out.gain.setValueAtTime(level * 0.1, t);
-    out.gain.linearRampToValueAtTime(level, t + Math.min(buffer.duration, FADE_SECONDS));
-  } else {
-    out.gain.value = level;
-  }
   const src = audio.createBufferSource();
   src.buffer = buffer;
   src.connect(out);
-  src.start();
+  if (fade) {
+    const steps = 600; // one point every 25 ms; the gain moves in straight lines between them
+    out.gain.setValueCurveAtTime(Float32Array.from({ length: steps + 1 }, (_, i) => level * fadeGain((i / steps) * FADE_SECONDS)), t, FADE_SECONDS);
+    const plays = fadePlays(buffer.duration);
+    if (plays > 1) { src.loop = true; src.start(t); src.stop(t + plays * buffer.duration); } else src.start(t);
+  } else {
+    out.gain.value = level;
+    src.start(t);
+  }
   playing.push(src);
 }
 dayflow.onChime(({ sound, fallback, fade }) => play(sound, fallback, undefined, { fade })); // main picks the sound from the block's type
@@ -1321,13 +1334,14 @@ function mono(buffer, from = 0, to = buffer.length) {
   return out;
 }
 
-// Fade in (DayFlow's: from 10% over up to 7 seconds) and a short fade out, so a cut doesn't click.
+// Fade in (DayFlow's, over the first 15 seconds or the whole piece if it's shorter) and a short
+// fade out, so a cut doesn't click.
 function shape(samples, rate, { fadeIn = false, fadeOut = 0 } = {}) {
-  const inN = Math.max(1, Math.round(Math.min(samples.length / rate, FADE_SECONDS) * rate));
+  const inSeconds = Math.min(samples.length / rate, FADE_SECONDS);
   const outN = Math.round(fadeOut * rate);
   for (let i = 0; i < samples.length; i++) {
     let g = 1;
-    if (fadeIn && i < inN) g *= 0.1 + 0.9 * (i / inN);
+    if (fadeIn) g *= fadeGain(i / rate, inSeconds);
     if (outN && i >= samples.length - outN) g *= (samples.length - i) / outN;
     samples[i] *= g;
   }
